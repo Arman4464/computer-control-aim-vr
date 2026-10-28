@@ -203,6 +203,15 @@ class KeyboardEngine:
             self._raw_key_up(key_name)
         self.governor.post_action()
 
+    def _release_all_modifiers(self):
+        """Universal failsafe: ensure all standard modifiers are physically released."""
+        EXTENDED_MODS = {0x5B, 0x5C, 0xA3, 0xA5}
+        for mod_vk in (0x11, 0xA2, 0xA3, 0x12, 0xA4, 0xA5, 0x10, 0xA0, 0xA1, 0x5B, 0x5C):
+            flags = KEYEVENTF_KEYUP
+            if mod_vk in EXTENDED_MODS:
+                flags |= KEYEVENTF_EXTENDEDKEY
+            user32.keybd_event(mod_vk, 0, flags, 0)
+
     def hotkey(self, *keys: str, duration: float = 0.04):
         """
         Presses multiple keys simultaneously in sequence, waits duration,
@@ -215,7 +224,7 @@ class KeyboardEngine:
             for k in keys:
                 self._raw_key_down(k)
                 pressed_keys.append(k)
-                time.sleep(0.01)
+                time.sleep(0.015)
 
             time.sleep(duration)
         finally:
@@ -223,25 +232,22 @@ class KeyboardEngine:
             for k in reversed(pressed_keys):
                 try:
                     self._raw_key_up(k)
-                    time.sleep(0.01)
+                    time.sleep(0.015)
                 except Exception:
                     pass
-            # Universal failsafe: ensure all standard modifiers are physically released
-            EXTENDED_MODS = {0x5B, 0x5C, 0xA3, 0xA5}
-            for mod_vk in (0x11, 0xA2, 0xA3, 0x12, 0xA4, 0xA5, 0x10, 0xA0, 0xA1, 0x5B, 0x5C):
-                flags = KEYEVENTF_KEYUP
-                if mod_vk in EXTENDED_MODS:
-                    flags |= KEYEVENTF_EXTENDEDKEY
-                user32.keybd_event(mod_vk, 0, flags, 0)
+            self._release_all_modifiers()
         self.governor.post_action()
 
-    def type_text(self, text: str, interval: float = 0.01):
+    def type_text(self, text: str, interval: float = 0.025):
         """
         Types text using layout-independent Unicode events (KEYEVENTF_UNICODE).
         Guarantees that characters, symbols, and multilingual text type correctly
         regardless of active keyboard layout. Supports UTF-16 surrogate pairs (emojis).
         """
         self.governor.pre_action()
+        self._release_all_modifiers()
+        time.sleep(0.01)
+
         # Normalize CRLF to prevent double-enter execution
         normalized_text = text.replace("\r\n", "\n").replace("\r", "\n")
         for char in normalized_text:
@@ -256,7 +262,7 @@ class KeyboardEngine:
                     code_unit = utf16_bytes[i] | (utf16_bytes[i + 1] << 8)
                     # Key down
                     _send_key_input(0, code_unit, KEYEVENTF_UNICODE)
-                    time.sleep(0.001)
+                    time.sleep(0.010)
                     # Key up
                     _send_key_input(0, code_unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP)
             if interval > 0:
