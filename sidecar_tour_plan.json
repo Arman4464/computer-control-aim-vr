@@ -1,0 +1,44 @@
+{
+  "steps": [
+    {
+      "action": "click",
+      "query": "Windows & Layout",
+      "description": "Switch to Windows & Layout tab"
+    },
+    {
+      "action": "wait",
+      "seconds": 1.2,
+      "description": "Display Layout Snapping controls"
+    },
+    {
+      "action": "click",
+      "query": "PiP Sandbox",
+      "description": "Switch to Virtual Desktop PiP Sandbox tab"
+    },
+    {
+      "action": "wait",
+      "seconds": 1.2,
+      "description": "Display Picture-in-Picture controls"
+    },
+    {
+      "action": "click",
+      "query": "Diagnostics",
+      "description": "Switch to System Diagnostics tab"
+    },
+    {
+      "action": "wait",
+      "seconds": 1.0,
+      "description": "Display System Telemetry and latency graphs"
+    },
+    {
+      "action": "click",
+      "query": "Control & Safety",
+      "description": "Switch back to Control & Safety settings"
+    },
+    {
+      "action": "wait",
+      "seconds": 1.0,
+      "description": "Final pause on dashboard"
+    }
+  ]
+}

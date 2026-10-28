@@ -71,6 +71,7 @@ def main():
     exec_parser.add_argument("steps_json", nargs="+", help="JSON string or file containing list of action steps")
     exec_parser.add_argument("--no-verify", action="store_true", help="Disable visual servoing verification")
     exec_parser.add_argument("--allow-failsafe", action="store_true", help="Keep corner failsafe enabled")
+    exec_parser.add_argument("--record", help="Path to save continuous animated WebP screen recording (e.g. assets/demo.webp)")
 
     # 1b. dag: Speculative Action DAG execution
     dag_parser = subparsers.add_parser("dag", help="Execute Speculative Action DAG with closed-loop verification")
@@ -78,6 +79,7 @@ def main():
     dag_parser.add_argument("--no-verify", action="store_true", help="Disable micro-servoing verification")
     dag_parser.add_argument("--continue-on-error", action="store_true", help="Do not halt DAG when a step fails")
     dag_parser.add_argument("--allow-failsafe", action="store_true", help="Keep corner failsafe enabled")
+    dag_parser.add_argument("--record", help="Path to save continuous animated WebP screen recording (e.g. assets/demo.webp)")
 
     # 2. click: semantic query or coordinates
     click_parser = subparsers.add_parser("click", help="Click an element by name, query, or coordinates")
@@ -203,10 +205,20 @@ def main():
             sys.stderr.write("Invalid steps format: must be list or object with 'steps' key.\n")
             sys.exit(1)
 
-        res, is_err = server.execute_tool(
-            "execute_autonomous_task",
-            {"steps": steps, "verify": not args.no_verify}
-        )
+        rec_path = getattr(args, "record", None)
+        if rec_path:
+            server.execute_tool("record_screen", {"action": "start", "fps": 15, "max_dim": 800, "include_cursor": True})
+
+        try:
+            res, is_err = server.execute_tool(
+                "execute_autonomous_task",
+                {"steps": steps, "verify": not args.no_verify}
+            )
+        finally:
+            if rec_path:
+                rec_res, _ = server.execute_tool("record_screen", {"action": "stop", "output_path": rec_path, "format": "webp"})
+                sys.stderr.write(f"{rec_res[0]['text']}\n")
+
         print(res[0]["text"])
         sys.exit(1 if is_err else 0)
 
@@ -222,14 +234,24 @@ def main():
             sys.stderr.write("Invalid DAG format: must be list or object with 'steps' key.\n")
             sys.exit(1)
 
-        res, is_err = server.execute_tool(
-            "execute_action_dag",
-            {
-                "steps": steps,
-                "stop_on_error": not args.continue_on_error,
-                "auto_verify": not args.no_verify,
-            }
-        )
+        rec_path = getattr(args, "record", None)
+        if rec_path:
+            server.execute_tool("record_screen", {"action": "start", "fps": 15, "max_dim": 800, "include_cursor": True})
+
+        try:
+            res, is_err = server.execute_tool(
+                "execute_action_dag",
+                {
+                    "steps": steps,
+                    "stop_on_error": not args.continue_on_error,
+                    "auto_verify": not args.no_verify,
+                }
+            )
+        finally:
+            if rec_path:
+                rec_res, _ = server.execute_tool("record_screen", {"action": "stop", "output_path": rec_path, "format": "webp"})
+                sys.stderr.write(f"{rec_res[0]['text']}\n")
+
         print(res[0]["text"])
         sys.exit(1 if is_err else 0)
 

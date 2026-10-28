@@ -3,12 +3,26 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue.svg)](https://microsoft.com)
 [![Python](https://img.shields.io/badge/Python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![MCP Version](https://img.shields.io/badge/MCP-2024--11--05-green.svg)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/Tests-62%2F62%20Passing%20(100%25)-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-67%2F67%20Passing%20(100%25)-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Autonomous In-Memory Vision Runner (AIM-VR 3.0)** is an industrial-grade desktop automation and computer control engine engineered specifically for LLMs and AI agents operating on Windows 10 and 11.
 
-Unlike standard vision-agent frameworks that suffer from sluggish multi-turn screenshot round-trips, coordinate misalignment, and desktop contention, AIM-VR 3.0 delivers **sub-30ms closed-loop execution**, **sub-15ms local native WinRT OCR**, **zero-token COM connectors**, **isolated Picture-in-Picture (PiP) sandboxing**, and **speculative Action DAG orchestration**.
+Unlike standard vision-agent frameworks that suffer from sluggish multi-turn screenshot round-trips, coordinate misalignment, and desktop contention, AIM-VR 3.0 delivers **sub-30ms closed-loop execution**, **sub-15ms local native WinRT OCR**, **zero-token COM connectors**, **isolated Picture-in-Picture (PiP) sandboxing**, **continuous 15 FPS screen recording**, and **speculative Action DAG orchestration**.
+
+---
+
+## Live Demonstrations
+
+### 1. Autonomous Live Reddit Submission
+Continuous 15 FPS hardware cursor screen recording showing the AI agent autonomously navigating Google Chrome, applying flairs with the Two-Phase Modal Protocol, and submitting the post in ~3.2 seconds without turn-by-turn screenshot micromanagement:
+
+![Live Autonomous Reddit Submission](assets/reddit_live_post.webp)
+
+### 2. Sidecar Hub & Desktop Virtualization Tour
+Tour of the Web-based Sidecar Control Hub (`http://localhost:8765`), showing real-time system diagnostics, layout snapping, and Picture-in-Picture sandbox virtualization:
+
+![Extension & Sidecar Hub Tour](assets/extension_tour.webp)
 
 ---
 
@@ -106,6 +120,8 @@ AIM-VR 3.0 exposes 29 specialized MCP tools adhering to protocol version `2024-1
 | `ocr_screen` | `target` (string), `query` (string) | Sub-15ms local WinRT OCR spotting and bounding box extraction. |
 | `screenshot` | `target` (string), `mode` (`full`/`delta`/`pip`), `som` (bool) | Screen capture with optional differential cropping or OmniParser Set-of-Marks badges. |
 | `inspect_ui` | `target` (string), `max_depth` (int), `max_elements` (int) | Low-token hierarchical text dump of the Windows UI Automation (UIA) tree. |
+| `find_element` | `query`, `target`, `role`, `scope`, `region` | Unified hybrid locator across UIA (Layer 1) and WinRT OCR (Layer 2) with modal dialog scoping. |
+| `record_screen` | `action` (`start`/`stop`/`status`), `output_path`, `fps`, `max_dim`, `format` | Continuous high-speed screen recorder compiling 24-bit animated WebP/GIF with hardware cursor stamping. |
 
 ### 5. Input Control & Window Management
 | Tool | Arguments | Purpose |

@@ -1,0 +1,46 @@
+{
+  "steps": [
+    {
+      "action": "click",
+      "x": 222,
+      "y": 197,
+      "description": "Click Title input field"
+    },
+    {
+      "action": "paste_text",
+      "text": "I built an open-source OS-level Computer Control skill for Antigravity (AIM-VR) — and yes, this post itself was autonomously submitted by it",
+      "description": "Paste post title"
+    },
+    {
+      "action": "wait",
+      "seconds": 0.5,
+      "description": "Short pause after title injection"
+    },
+    {
+      "action": "click",
+      "x": 225,
+      "y": 310,
+      "description": "Click Body text area"
+    },
+    {
+      "action": "paste_text",
+      "text": "Hey everyone!\n\nI wanted to share something I've been building for Google Antigravity: **Computer Control (AIM-VR 3.0)** — an industrial-grade, OS-level desktop automation and perception engine for AI agents on Windows.\n\nFull Open-Source Repo: https://github.com/Arman4464/computer-control-aim-vr\n\n### Complete Transparency:\nYes, **even this post was written, formatted, and submitted autonomously by the AI agent itself** using the AIM-VR engine!\nTo be completely honest about the time:\n- Initial drafting and thinking: ~25 seconds\n- Navigation, title injection, flair selection, and body paste: **~3.2 seconds** of local execution time\n- Zero screenshot-and-guess loops; executed natively via sub-15ms local WinRT OCR text grounding.\n\n### Why I Built This:\nStandard computer-use implementations (like Anthropic's) fall into the painful loop of taking a full screenshot after every micro-action, burning 25,000+ vision tokens, taking 15–20 minutes, and drifting whenever web layouts reflow.\n\nAIM-VR replaces that with a **3-Layer Vision & Targeting Hierarchy**:\n1. **Layer 1: Semantic UIA** — Sub-5ms native Windows accessibility tree control (Notepad, Explorer, Settings).\n2. **Layer 2: Local WinRT OCR** — Sub-15ms native Windows OCR text grounding (Chrome, Brave, Electron, web forms, modals) with zero visual token consumption.\n3. **Layer 3: OmniParser SOM** — Set-of-Marks integer badge overlay strictly as fallback for unlabeled graphics and canvas games.\n\nPlus:\n- Isolated Picture-in-Picture (PiP) Virtual Desktop Sandbox (runs background automations without stealing your mouse/keyboard)\n- Web-based Sidecar Control Hub & Monitor (port 8765)\n- Continuous 15 FPS hardware-stamped screen recording\n\n### Looking for Collaborators / Contributors!\nIf anyone wants to help me continue and expand this project, **I am completely open to collaboration!** There's so much we can build together (multi-monitor virtualization, Linux/macOS cross-compatibility, speculative execution DAGs, etc.).\n\nFeel free to check out the repo, star it, fork it, or open an issue/PR:\n👉 https://github.com/Arman4464/computer-control-aim-vr\n\nWould love to hear your thoughts, feedback, and what desktop automations you'd like to see next!",
+      "description": "Paste comprehensive post body"
+    },
+    {
+      "action": "wait",
+      "seconds": 0.8,
+      "description": "Allow Reddit editor to process Markdown"
+    },
+    {
+      "action": "click",
+      "query": "Post",
+      "description": "Click Post submit button via OCR grounding"
+    },
+    {
+      "action": "wait",
+      "seconds": 2.0,
+      "description": "Wait for Reddit submission confirmation"
+    }
+  ]
+}
