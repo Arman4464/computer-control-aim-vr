@@ -235,6 +235,17 @@ def find_element_by_query(
     Fast direct-lookup search for a specific UI element in the tree and returns its coordinates.
     Runs inside run_in_interactive_desktop for zero-guesswork precision in <0.2s.
     """
+    # Fast bypass for Chromium / web browsers:
+    # Browsers render DOM elements on GPU canvas without exposing UIA nodes unless specialized flags are set.
+    # Bypassing UIA immediately routes element queries to sub-15ms WinRT OCR without tree-walk lag.
+    if target:
+        t_low = target.lower()
+        if any(b in t_low for b in ["chrome", "brave", "edge", "firefox", "browser"]):
+            return None
+    fg = get_foreground_window_info()
+    if fg and any(b in (fg.get("title") or "").lower() for b in ["chrome", "brave", "edge", "firefox", "google chrome"]):
+        return None
+
     win_info = find_window(target) if target else None
 
     def _search():

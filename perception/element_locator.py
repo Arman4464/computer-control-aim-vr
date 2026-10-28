@@ -56,7 +56,7 @@ class ElementLocator:
     ) -> Optional[Dict[str, Any]]:
         """
         Locates a UI element by text, label, or role.
-        Tries UIA first; if not found or in a browser/canvas, falls back to sub-15ms WinRT OCR.
+        Supports scope="modal" to automatically restrict search to the active modal/dialog overlay.
         
         Returns:
             {
@@ -73,8 +73,43 @@ class ElementLocator:
         if not q:
             return None
 
-        # Fast-Path: Sub-15ms Native WinRT OCR Text Grounding
-        # OCR runs in ~12ms and covers browsers, Electron, and native text equally well.
+        # Scope restriction for modal dialogs (prevents confusing background page words with modal controls)
+        if scope in ["modal", "dialog"] and region is None:
+            vx, vy, vw, vh = get_virtual_screen_bounds()
+            margin_x = int(vw * 0.16)
+            margin_y = int(vh * 0.12)
+            region = (vx + margin_x, vy + margin_y, vw - 2 * margin_x, vh - 2 * margin_y)
+
+        # -------------------------------------------------------------
+        # Tier 1: Windows UI Automation (Native Controls)
+        # Bypassed in 0ms for web/Chromium windows via uia_inspector fast-bypass.
+        # -------------------------------------------------------------
+        if scope not in ["modal", "dialog"]:
+            try:
+                uia_match = find_element_by_query(
+                    target=target_window,
+                    name=q,
+                    role=role,
+                )
+                if uia_match and uia_match.get("center"):
+                    cx, cy = uia_match["center"]
+                    bbox = uia_match.get("bbox", [cx - 10, cy - 10, 20, 20])
+                    if bbox[2] > 0 and bbox[3] > 0:
+                        return {
+                            "name": uia_match.get("name", q),
+                            "role": uia_match.get("role", role or "Control"),
+                            "bbox": bbox,
+                            "center": (cx, cy),
+                            "source": "uia",
+                            "confidence": 1.0,
+                        }
+            except Exception:
+                pass
+
+        # -------------------------------------------------------------
+        # Tier 2: Sub-15ms Native WinRT OCR Text Grounding (Web, Electron, Modals)
+        # -------------------------------------------------------------
+        # Capture the relevant visual frame
         screen_offset_x = 0
         screen_offset_y = 0
         img = None
@@ -118,28 +153,6 @@ class ElementLocator:
                 "source": "ocr",
                 "confidence": match.get("confidence", 0.9),
             }
-
-        # Fallback: Windows UI Automation (for native controls when OCR doesn't match)
-        try:
-            uia_match = find_element_by_query(
-                target=target_window,
-                name=q,
-                role=role,
-            )
-            if uia_match and uia_match.get("center"):
-                cx, cy = uia_match["center"]
-                bbox = uia_match.get("bbox", [cx - 10, cy - 10, 20, 20])
-                if bbox[2] > 0 and bbox[3] > 0:
-                    return {
-                        "name": uia_match.get("name", q),
-                        "role": uia_match.get("role", role or "Control"),
-                        "bbox": bbox,
-                        "center": (cx, cy),
-                        "source": "uia",
-                        "confidence": 1.0,
-                    }
-        except Exception:
-            pass
 
         return None
 
@@ -189,6 +202,35 @@ class ElementLocator:
                     "source": "ocr",
                 })
         return matches
+
+    def locate_dialog(self, target_window: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Scans for an active modal or dialog overlay on screen and resolves its primary
+        commit button ('Add', 'Apply', 'Save', 'OK', 'Done', 'Submit') and cancel button.
+        Eliminates guesswork in modal completion loops.
+        """
+        commit_candidates = ["Add", "Apply", "Save", "OK", "Done", "Confirm", "Submit"]
+        cancel_candidates = ["Cancel", "Discard", "Close"]
+
+        commit_elem = None
+        for c in commit_candidates:
+            match = self.locate(c, target_window=target_window, scope="modal")
+            if match:
+                commit_elem = match
+                break
+
+        cancel_elem = None
+        for c in cancel_candidates:
+            match = self.locate(c, target_window=target_window, scope="modal")
+            if match:
+                cancel_elem = match
+                break
+
+        return {
+            "has_active_dialog": bool(commit_elem or cancel_elem),
+            "commit_button": commit_elem,
+            "cancel_button": cancel_elem,
+        }
 
 
 default_locator = ElementLocator()

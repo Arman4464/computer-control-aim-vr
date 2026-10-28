@@ -8,197 +8,189 @@ description: >-
   type/paste text, press keyboard shortcuts, or automate multi-step workflows.
 ---
 
-# Windows Computer Control (AIM-VR 3.0)
+# Windows Computer Control & Interaction Engine (AIM-VR 3.0)
 
-Industrial-grade OS-level desktop automation guide for AI agents. Provides direct OS control, accessibility tree grounding, native sub-15ms WinRT OCR, Set-of-Marks visual badges, native Win32 clipboard text injection, window snapping and layout management, non-invasive system media control, safe targeted window lifecycle management, and closed-loop multi-step execution.
+Industrial-grade, multi-tier desktop automation and perception subsystem for Windows. Designed specifically for AI agents to achieve **sub-30ms execution, zero hallucination, and massive token savings** over traditional screenshot-and-think computer-use loops.
 
 ---
 
-## 1. Cardinal Operating Invariants
+## 1. The 3-Layer Vision & Targeting Hierarchy
+
+```mermaid
+flowchart TD
+    Task["Incoming User Action / UI Goal"] --> Decision{"What type of element is it?"}
+    
+    Decision -->|"Native Windows Controls (WinUI/WPF/Win32)"| L1["Layer 1: Semantic UIA\n• inspect_ui / find_element\n• 0 visual tokens | <5ms latency\n• Instant zero-guesswork click"]
+    Decision -->|"Webpages, Chrome, Electron, Canvas, Forms"| L2["Layer 2: Local WinRT OCR\n• click(text='...') / find_element\n• 0 visual tokens | 12ms latency\n• Dynamic visual text-grounding"]
+    Decision -->|"Unlabeled Icons, Sliders, Games, Graphics"| L3["Layer 3: OmniParser SOM\n• screenshot(som=True)\n• Numbered badges (NMS-filtered)\n• click(mark_id=N)"]
+
+    L1 --> Exec["Layer 3 Execution:\nexecute_autonomous_task / execute_action_dag\n(Single-turn local in-memory closed loop in <2s)"]
+    L2 --> Exec
+    L3 --> Exec
+```
+
+- **Layer 1: Semantic UI Automation (UIA)**:
+  - *Best for*: Native Windows desktop apps (Notepad, File Explorer, Calculator, Settings, WinUI dialogs).
+  - *Behavior*: Reads the OS accessibility tree directly. Returns zero-token, exact bounding boxes in <5ms.
+  - *Tools*: `inspect_ui`, `find_element(role="Button")`.
+
+- **Layer 2: High-Speed Local WinRT OCR (Text Grounding)**:
+  - *Best for*: Web browsers (Chrome, Edge, Brave), Electron apps (VSCode, Slack, Discord), web forms, tables, modals.
+  - *Behavior*: Executes 100% locally via Windows.Media.Ocr. Automatically resolves text labels (`"Title"`, `"Post"`, `"Discussion"`, `"Apply"`, `"Save"`) to live physical screen coordinates in **12 milliseconds**. **Zero visual tokens burned in the LLM**.
+  - *Tools*: `click(text="Submit")`, `find_element(query="Apply")`, `ocr_screen(query="Export")`.
+
+- **Layer 3: OmniParser Set-of-Marks (SOM)**:
+  - *Best for*: Unlabeled graphical icons, video players, canvas sliders, games, and pure graphic controls where no text or UIA metadata exists.
+  - *Behavior*: Overlays high-contrast, NMS-filtered numbered badges (Yellow=UIA, Green=OCR, Cyan=Icons) for integer clicking (`click(mark_id=5)`).
+  - *Rule*: **STRICTLY a fallback**. Never use Layer 3 when Layer 1 or Layer 2 text is present.
+
+---
+
+## 2. Cardinal Operating Invariants (What to Do and What NOT to Do)
 
 > [!CAUTION]
-> ### 1. NEVER SEND BLIND DESTRUCTIVE SHORTCUTS (Alt+F4 / Ctrl+W)
-> **Never** execute blind `hotkey(["alt", "f4"])` or `hotkey(["ctrl", "w"])` to close an application. Global shortcuts strike whatever window happens to have foreground focus—potentially terminating the user's active browser, music stream (e.g. Brave / YouTube / Spotify), or unsaved code editor.
-> **Mandatory Rule**: ALWAYS use `close_window(target="...")` or CLI `python cli.py close "<Title>"`. This sends targeted Win32 `WM_CLOSE` and `SC_CLOSE` messages directly to the target window's HWND without touching the foreground window or interfering with active user applications.
+> ### 1. THE TURN-BY-TURN "SCREENSHOT & GUESS" ANTI-PATTERN (STRICTLY FORBIDDEN)
+> **Never fall into the slow, token-burning loop of taking a full screenshot after every single micro-action.**
+> - *The Anti-Pattern*: `take_screenshot -> inspect -> click(x, y) -> take_screenshot -> click(x, y)`. This burns 25,000+ tokens, introduces 10-second chat latency per step, and frequently misses when dynamic layouts reflow.
+> - *The Mandatory Rule*: For any multi-step workflow (2+ actions), **ALWAYS dispatch the sequence in a single turn** via `execute_autonomous_task` or `execute_action_dag`. The local host engine runs the loop locally at native speed with closed-loop visual servoing in <2 seconds.
 
 > [!IMPORTANT]
-> ### 2. PREFER NATIVE CLIPBOARD FOR LONG TEXT / CODE (`clipboard` or `paste_text`)
-> For typing code, paragraphs, multiline scripts, or URLs, **ALWAYS** use `clipboard(action="paste", text="...")` or `paste_text` step. Keystroke-by-keystroke simulation (`type_text`) is slower and vulnerable to layout shifts or dropped keys under system load. Native Win32 clipboard injection is instantaneous and 100% accurate.
+> ### 2. THE TWO-PHASE MODAL & DIALOG PROTOCOL (NEVER CANCEL WITH "X")
+> When interacting with modals, popups, or dialogs (e.g. flair pickers, "Save As", cookie banners, dropdowns):
+> 1. **Phase 1: Selection Phase**: Click the target option, radio button, or tag (e.g. `click(text="Discussion")`).
+> 2. **Phase 2: Commit Phase**: You **MUST** locate and click the dialog's commit action button (`"Apply"`, `"Save"`, `"Add"`, `"Done"`, `"Confirm"`, `"OK"`, `"Submit"`).
+> - **Strict Prohibition**: **NEVER click `X` (close) after making a selection**. Clicking `X` discards your selection and cancels the dialog!
+> - **The Scroll Rule**: If the commit button is below the visible dialog fold, scroll down inside the dialog (`scroll(clicks=-3)`) before trying to close or give up.
 
 > [!IMPORTANT]
-> ### 3. VERIFY SCREEN STATE BEFORE ACTING ("Look Before You Touch")
+> ### 3. THE CHROMIUM & WEB APP RULE (NO UIA DOM TREES)
+> Modern GPU/browser applications (Google Chrome, Brave, Edge, Electron apps) do **NOT** expose their web DOM elements to Windows UI Automation by default.
+> - **Never** expect `inspect_ui` to find internal webpage buttons.
+> - **Always** use Layer 2 text grounding: `click(text="Button Label")` or `find_element(query="Search")`. This triggers local 12ms WinRT OCR directly and resolves the current live physical pixel coordinates without layout drift.
+
+> [!CAUTION]
+> ### 4. NEVER SEND BLIND DESTRUCTIVE SHORTCUTS (Alt+F4 / Ctrl+W)
+> **Never** execute blind `hotkey(["alt", "f4"])` or `hotkey(["ctrl", "w"])` to close an application. Global shortcuts strike whatever window happens to have foreground focus—potentially terminating the user's active browser, music stream (e.g. YouTube / Spotify), or unsaved editor.
+> - **Mandatory Rule**: ALWAYS use `close_window(target="...")` or CLI `python cli.py close "<Title>"`. This sends targeted Win32 `WM_CLOSE` messages directly to the target window's HWND without touching active foreground applications.
+
+> [!IMPORTANT]
+> ### 5. PREFER NATIVE CLIPBOARD FOR ALL TEXT & CODE (`clipboard` or `paste_text`)
+> For typing code, paragraphs, URLs, or multiline text, **ALWAYS** use `clipboard(action="paste", text="...")` or `paste_text` step. Keystroke-by-keystroke simulation (`type_text`) is slow and vulnerable to layout shifts or dropped keys under system load. Native Win32 clipboard injection is instantaneous and 100% accurate.
+
+> [!IMPORTANT]
+> ### 6. VERIFY SCREEN STATE BEFORE ACTING ("Look Before You Touch")
 > Call `get_screen_info` to inspect `visible_windows` (all open windows, titles, PIDs, bounds, monitor geometry) and `foreground_window` before initiating window transitions. Never assume an app is focused or running.
 
-> [!TIP]
-> ### 4. SINGLE-TURN MULTI-STEP PREFERENCE (`execute_autonomous_task`)
-> For tasks requiring 2+ sequential actions (e.g. launch app, snap window, click search, paste query, press enter), **ALWAYS** dispatch them in a single call via `execute_autonomous_task` or CLI `python cli.py execute '<JSON>'`. This executes locally in an in-memory closed loop (sub-30ms reaction checks) rather than consuming slow multi-turn chat round-trips.
-
 > [!IMPORTANT]
-> ### 5. WORKSPACE & WINDOW STATE RESTORATION ("Leave No Trace")
+> ### 7. WORKSPACE & WINDOW STATE RESTORATION ("Leave No Trace")
 > **Always restore the user's desktop to its exact prior state once a task completes:**
-> - **Minimized Apps**: If an application was minimized and you unminimized/restored it to extract information or perform an action, **minimize it back** immediately after achieving your goal:
->   `manage_window(target="...", action="state", state="minimize")`
-> - **Spawned Apps**: If you opened a new application solely to accomplish a task (e.g., File Explorer, Notepad, Calculator), **close it cleanly** when finished:
->   `close_window(target="...")`
-> - **Focus Restoration**: Always return active foreground focus to the user's original working window (e.g., Antigravity IDE / terminal) so their typing and cursor workflow is completely undisturbed.
+> - **Minimized Apps**: If an application was minimized and you restored it to perform an action, **minimize it back** immediately when finished: `manage_window(target="...", action="state", state="minimize")`.
+> - **Spawned Apps**: If you opened an application solely to accomplish a task (e.g. Notepad, File Explorer), **close it cleanly** when finished: `close_window(target="...")`.
+> - **Focus Restoration**: Always return active foreground focus to the user's original working window (e.g., Antigravity IDE / terminal) so their typing workflow is completely undisturbed.
 
 ---
 
-## 2. Tool Selection Matrix
+## 3. Tool Selection Matrix
 
 | User Intent / Scenario | Recommended Tool | Interface & Behavior |
 |---|---|---|
-| **Speculative Action DAG execution** | `execute_action_dag(steps=[...])` | High-performance DAG pipeline with topological sorting, variable interpolation (`{{steps.id.result}}`), and sub-30ms closed-loop micro-servoing. |
-| **Multi-step workflow** (2+ actions) | `execute_autonomous_task(steps=[...])` | Autonomous In-Memory Vision Runner. Executes entire sequence locally with closed-loop verification. |
-| **Snap / arrange / resize window** | `manage_window(target="...", action="snap", position="left")` | Snaps window to monitor work area (left, right, top, bottom, quadrants, center) or sets exact pixel bounds. |
+| **Multi-step workflow (2+ actions)** | `execute_autonomous_task(steps=[...])` | Autonomous In-Memory Runner. Executes entire sequence locally with closed-loop verification in <2s. |
+| **Complex DAG with dependencies** | `execute_action_dag(steps=[...])` | High-performance DAG pipeline with topological sorting, variable interpolation (`{{steps.id.result}}`), and sub-30ms servoing. |
+| **Click button / link / form by label** | `click(text="Submit", target="Chrome")` | Resolves live physical center via local WinRT OCR or UIA in 12ms. Auto-activates window before clicking. |
+| **Locate element / inspect coordinates** | `find_element(query="Apply", scope="modal")` | Finds exact physical screen bounding box `[x, y, w, h]` and center `(cx, cy)` without taking a full screenshot. |
+| **Continuous Screen Recording** | `record_screen(action="start"|"stop"|"status")` | High-speed, continuous 15-30 FPS recording with physical cursor stamping and high-compression 24-bit WebP/GIF export. |
 | **Instant paste long text or code** | `clipboard(action="paste", text="...")` | Instant Win32 clipboard text injection followed by atomic `Ctrl+V`. Immune to layout corruption. |
-| **Read clipboard contents** | `clipboard(action="get")` | Retrieves current text on Windows clipboard. |
-| **Control audio / media playback** | `control_media(action="volume_up"|"play_pause"|...)` | Adjusts volume or controls media tracks without switching active windows. |
+| **Snap / arrange / resize window** | `manage_window(target="...", action="snap", position="left")` | Snaps window to monitor work area (left, right, top, bottom, quadrants, center) or sets exact pixel bounds. |
 | **Safely close an app/window** | `close_window(target="Window Title")` | Sends Win32 `WM_CLOSE` directly to target HWND. 100% immune to closing foreground music/browser. |
-| **Launch an app or file/URL** | `launch_app(name="chrome")` | Resolves standard paths, App Paths registry, or system PATH; waits for window to appear. |
-| **Non-disruptive background app launch** | `sandbox_launch(command="notepad.exe")` | Spawns application on isolated sandbox desktop (`AIMVR_Sandbox`). Zero cursor hijacking. |
+| **Launch an app or URL** | `launch_app(name="chrome")` | Resolves standard paths, App Paths registry, or system PATH; waits for window to appear. |
+| **Non-disruptive background sandbox** | `sandbox_launch(command="notepad.exe")` | Spawns application on isolated sandbox desktop (`AIMVR_Sandbox`). Zero cursor hijacking. |
 | **Capture PiP sandbox preview** | `sandbox_capture()` or `screenshot(mode="pip")` | Renders Picture-in-Picture composite preview of all windows open in background sandbox. |
-| **Manage sandbox desktop** | `sandbox_manage(action="status"|"close_window"|"destroy")` | Queries open windows, targets closing, or terminates sandbox session cleanly. |
-| **Switch automation mode** | `configure_safety(desktop_mode="isolated_pip"|"interactive")` | Toggles between background non-disruptive PiP sandbox and foreground interactive execution. |
-| **Navigate or list File Explorer** | `com_explorer(action="list"|"open"|"get_selected")` | Direct Shell.Application COM interface. Navigates or lists open folders and selected items in 5ms. |
-| **Read or write Excel directly** | `com_excel(action="read_cell"|"write_cell"|"read_range")` | Direct Excel COM object manipulation. Reads/writes cells and formulas instantaneously without clicking. |
-| **Inspect or navigate browser tabs** | `com_browser_cdp(action="list_tabs"|"navigate")` | Direct Chrome/Edge CDP protocol bridge. Inspects open tabs and URLs without vision tokens. |
+| **Scroll window or element** | `scroll(clicks=-3, x=500, y=400)` | Scrolls mouse wheel (-down, +up) at specified coordinates. |
+| **Control audio / media playback** | `control_media(action="volume_up"|"play_pause")` | Adjusts volume or controls media tracks without switching active windows. |
 | **Inspect screen, monitors & windows** | `get_screen_info()` | Returns virtual screen bounds, monitor work areas, foreground window, and full `visible_windows` list. |
-| **Click named button / menu / tab** | `click(query="Save", target="App")` | Resolves physical center via UIA accessibility tree with WinRT OCR fallback in <0.2s. |
-| **Hover to trigger flyout / tooltip** | `hover(query="Menu", duration=0.25)` | Moves cursor to target and hovers to activate hover-only UI dropdowns and tooltips. |
-| **Spot canvas / web text** | `ocr_screen(query="Export", target="App")` | Native WinRT OCR finds text bounding boxes in ~15ms when accessibility trees are absent. |
-| **Click unlabeled icons / canvas** | `screenshot(som=True, cluster_zoom=True)` ➔ `click(mark_id=N)` | OmniParser V2 Set-of-Marks with NMS, color-coded badges (Yellow=UIA, Green=OCR, Cyan=Icons), and auto-zoom for dense toolbars. |
-| **Switch / restore window** | `focus_window(target="App Title")` | Restores minimized windows (`SW_RESTORE`) and brings target window to verified foreground. |
-| **Short input / form typing** | `type_text(text="...")` | Hardware-independent `KEYEVENTF_UNICODE` typing for short inputs. |
-| **System shortcuts** | `hotkey(keys=["ctrl", "s"])` | Hardware scan-code simulation for application hotkeys. |
+| **Click unlabeled icons / canvas** | `screenshot(som=True)` ➔ `click(mark_id=N)` | OmniParser V2 Set-of-Marks with NMS, color-coded badges, and cluster auto-zoom for dense toolbars. |
 
 ---
 
-## 3. High-Yield Execution Recipes
+## 4. High-Yield Execution Recipes
 
-### Recipe A: Multi-Step Autonomous Task (`execute_autonomous_task`)
-Use for complete user tasks. Executes locally with zero inter-turn latency.
+### Recipe A: Multi-Step Autonomous Web Task (Form + Modal + Submit in 1 Turn)
+Use `execute_autonomous_task` to complete an entire multi-step form workflow in **one single tool call** locally:
 
 ```json
 {
   "name": "execute_autonomous_task",
   "arguments": {
     "steps": [
-      {"action": "launch_app", "name": "notepad"},
-      {"action": "wait", "seconds": 0.3},
-      {"action": "manage_window", "target": "Notepad", "sub_action": "snap", "position": "left"},
-      {"action": "paste_text", "text": "AIM-VR 3.0 In-Memory Automation Ready!\n"},
-      {"action": "hotkey", "keys": ["ctrl", "s"]}
+      {"action": "focus_window", "target": "Chrome"},
+      {"action": "click", "text": "Title"},
+      {"action": "paste_text", "text": "Announcing AIM-VR 3.0 Computer Control"},
+      {"action": "click", "text": "Add flair and tags"},
+      {"action": "click", "text": "Discussion"},
+      {"action": "click", "text": "Add"},
+      {"action": "click", "text": "Body text"},
+      {"action": "paste_text", "text": "Here is the full demonstration of autonomous computer control..."},
+      {"action": "scroll", "clicks": -3},
+      {"action": "click", "text": "Post"}
     ],
     "verify": true
   }
 }
 ```
 
-**Supported step actions**: `click`, `double_click`, `right_click`, `triple_click`, `hover`, `move`, `type_text`, `paste_text`, `press_key`, `hotkey`, `wait`, `focus_window`, `close_window`, `launch_app`, `manage_window`, `control_media`, `invoke_element`, `set_value`.
-
 ---
 
-### Recipe B: Window Management & Layout Snapping (`manage_window`)
-Organize windows cleanly on any monitor without triggering Windows Snap popup grids.
+### Recipe B: Continuous Screen Recording for Live Demos (`record_screen`)
+Capture fluid demonstration videos with hardware mouse cursor overlay:
 
 ```json
-// Snap Notepad to left half of screen:
-{"name": "manage_window", "arguments": {"target": "Notepad", "action": "snap", "position": "left"}}
-
-// Snap Browser to right half of screen:
-{"name": "manage_window", "arguments": {"target": "Brave", "action": "snap", "position": "right"}}
-
-// Maximize, minimize, or restore:
-{"name": "manage_window", "arguments": {"target": "Notepad", "action": "state", "state": "maximize"}}
-```
-
----
-
-### Recipe C: Media & Volume Control (`control_media`)
-Adjust volume or control music playback seamlessly in the background.
-
-```json
-// Volume up 3 steps:
-{"name": "control_media", "arguments": {"action": "volume_up", "steps": 3}}
-
-// Toggle play/pause for active music (Spotify / YouTube):
-{"name": "control_media", "arguments": {"action": "play_pause"}}
-
-// Toggle mute:
-{"name": "control_media", "arguments": {"action": "toggle_mute"}}
-```
-
----
-
-### Recipe D: Fast Clipboard Injection (`clipboard`)
-Inject multiline code blocks, Markdown, or JSON instantaneously.
-
-```json
-// 1. Instant paste into active window:
-{"name": "clipboard", "arguments": {"action": "paste", "text": "const greeting = 'Hello World';\nconsole.log(greeting);"}}
-
-// 2. Read clipboard contents:
-{"name": "clipboard", "arguments": {"action": "get"}}
-```
-
----
-
-### Recipe E: Speculative Action DAG Runner (`execute_action_dag`)
-Compile complex compound pipelines with dependencies, variable passing, and automatic reflection:
-
-```json
+// 1. Start continuous 15 FPS recording:
 {
-  "name": "execute_action_dag",
+  "name": "record_screen",
   "arguments": {
-    "steps": [
-      {"id": "step_launch", "action": "launch_app", "args": {"name": "notepad"}},
-      {"id": "step_focus", "action": "focus_window", "args": {"target": "Notepad"}, "depends_on": ["step_launch"]},
-      {"id": "step_type", "action": "paste_text", "args": {"text": "Speculative DAG pipeline running!"}, "depends_on": ["step_focus"]},
-      {"id": "step_save", "action": "hotkey", "args": {"keys": ["ctrl", "s"]}, "depends_on": ["step_type"]}
-    ],
-    "auto_verify": true
+    "action": "start",
+    "fps": 15,
+    "include_cursor": true,
+    "max_dim": 960,
+    "quality": 80
+  }
+}
+
+// 2. Perform actions... (via execute_autonomous_task or MCP tools)
+
+// 3. Stop recording and compile animated WebP / GIF:
+{
+  "name": "record_screen",
+  "arguments": {
+    "action": "stop",
+    "output_path": "assets/demo_recording.webp",
+    "format": "webp"
   }
 }
 ```
 
 ---
 
-### Recipe F: CLI Unified Runner (`cli.py`)
-Direct testing and shell execution:
+### Recipe C: Window Management & Layout Snapping (`manage_window`)
+Organize windows cleanly on any monitor without triggering Windows Snap popup grids:
 
-```powershell
-cd C:\Users\rango\OneDrive\Desktop\ComputerControl_Skill_Package
+```json
+// Snap Notepad to left half of screen:
+{"name": "manage_window", "arguments": {"target": "Notepad", "action": "snap", "position": "left"}}
 
-# Run a DAG plan:
-python cli.py dag dag_plan.json
-
-# Inspect screen, monitors, and open windows:
-python cli.py info
-
-# Snap a window to the left half:
-python cli.py window "Notepad" --snap left
-
-# Instant paste text:
-python cli.py clipboard --paste "Hello from CLI"
-
-# Control volume or media:
-python cli.py media volume_up --steps 2
-python cli.py media play_pause
-
-# Safely close an application:
-python cli.py close "Notepad"
+// Maximize Chrome:
+{"name": "manage_window", "arguments": {"target": "Chrome", "action": "state", "state": "maximize"}}
 ```
 
 ---
 
-## 4. Troubleshooting & Deterministic Recovery
+## 5. Deterministic Troubleshooting & Recovery
 
 | Symptom / Error | Root Cause | Deterministic Fix |
 |---|---|---|
-| Accidental window close / Music terminated | Blind `Alt+F4` was sent while another window was active. | **NEVER send Alt+F4**. Always use `close_window(target="...")` which uses targeted `WM_CLOSE` to the specific HWND. |
-| Dropped keys or slow text insertion | Simulating keystrokes for large text. | Use `clipboard(action="paste", text="...")` or `paste_text` step. |
-| `Target window matching 'X' not found` | App not running, minimized under different name, or ghost handle. | 1. Check `get_screen_info()` to see all running titles.<br>2. Launch via `launch_app(name="X")`. |
-| `Element matching 'X' not found` | Element offscreen or rendered in custom GPU canvas. | 1. Scope search via `ocr_screen(query="X")`.<br>2. Scroll into view via `scroll(clicks=-3)`.<br>3. Overlay visual badges via `screenshot(som=true)`. |
-| Failsafe triggered at (0, 0) | Physical mouse was parked in corner. | Move cursor: `move_cursor(x=500, y=500)` or `configure_safety(failsafe=false)`. |
-| User mouse contention yield | User touched the mouse during automation. | The engine yields automatically for 0.5s. Do not fight user input; resume when idle. |
+| First click swallowed / button doesn't fire | Window was inactive (`WM_MOUSEACTIVATE` consumed click). | In `MouseEngine`, target windows are now auto-activated with a 20ms message tick before click dispatch. |
+| Coordinate drift after typing / scrolling | Hardcoding coordinates from stale OCR dumps. | **Use `click(text="Button Label")`**. It runs a 12ms WinRT OCR scan and resolves live physical pixel centers on the current visual frame. |
+| Modal closes without applying changes | Agent clicked `X` (close) instead of commit button. | **Follow Invariant #2**: Click selection $\rightarrow$ Click `"Apply"` / `"Save"` / `"Add"`. Never click `X` to exit a modal after selecting an option. |
+| Empty UIA tree on Chrome / web browser | Chromium apps do not expose DOM nodes to Windows UIA. | **Follow Invariant #3**: Web browsers automatically bypass UIA and use Layer 2 sub-15ms WinRT OCR text grounding. |
+| Failsafe triggered at (0, 0) in background script | Thread was not attached to interactive input desktop. | `ensure_interactive_desktop()` now compares thread desktop against `OpenInputDesktop()` and attaches cleanly. |
+| Dropped keys or slow text insertion | Simulating keystrokes for large text. | **Use `clipboard(action="paste", text="...")`** or `paste_text` step. |

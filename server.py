@@ -1552,7 +1552,8 @@ class MCPServer:
 
                 try:
                     if act in ["click", "double_click", "right_click", "triple_click", "move", "hover"]:
-                        s_query = step.get("query")
+                        s_query = step.get("query") or step.get("text")
+                        s_role = step.get("role") or step.get("element_role")
                         s_mark = step.get("mark_id")
                         s_target = step.get("target")
                         s_x = step.get("x")
@@ -1580,12 +1581,12 @@ class MCPServer:
                             target_x, target_y = mark["center_x"], mark["center_y"]
                             target_bbox = mark["bbox"]
                         elif s_query:
-                            elem = find_element_by_query(target=s_target, name=s_query)
+                            elem = default_locator.locate(query=s_query, target_window=s_target, role=s_role)
                             if not elem:
-                                raise ValueError(f"Element matching '{s_query}' not found via UIA or OCR.")
+                                raise ValueError(f"Element matching '{s_query}' not found via UIA or OCR on screen.")
                             target_x, target_y = elem["center"][0], elem["center"][1]
                             target_bbox = elem["bbox"]
-                            step_record["source"] = elem.get("source", "uia")
+                            step_record["source"] = elem.get("source", "ocr")
                         elif s_x is not None and s_y is not None:
                             target_x, target_y, _ = self._project_coordinates(s_x, s_y, "pixel", target=s_target)
 
@@ -1637,6 +1638,13 @@ class MCPServer:
                         sec = float(step.get("seconds", 0.5))
                         time.sleep(sec)
                         step_record["details"] = f"Waited {sec}s"
+
+                    elif act == "scroll":
+                        clicks = int(step.get("clicks", -3))
+                        sx = step.get("x")
+                        sy = step.get("y")
+                        default_mouse.scroll(clicks, sx, sy)
+                        step_record["details"] = f"Scrolled {clicks} clicks at ({sx}, {sy})"
 
                     elif act == "focus_window":
                         w_target = step.get("target")
