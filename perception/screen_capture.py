@@ -307,7 +307,10 @@ def focus_window(hwnd: int) -> bool:
             except Exception:
                 pass
 
+        # Win32 Alt-key foreground unlock bypass to bypass Windows ForegroundLockTimeout
+        user32.keybd_event(0x12, 0, 0, 0)  # VK_MENU down
         res = user32.SetForegroundWindow(hwnd)
+        user32.keybd_event(0x12, 0, 2, 0)  # VK_MENU up
         if not res:
             # Safe bypass: attach thread input queues temporarily without touching keyboard state
             cur_tid = kernel32.GetCurrentThreadId()

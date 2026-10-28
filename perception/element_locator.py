@@ -73,9 +73,53 @@ class ElementLocator:
         if not q:
             return None
 
-        # -------------------------------------------------------------
-        # Tier 1: Windows UI Automation (Native Controls)
-        # -------------------------------------------------------------
+        # Fast-Path: Sub-15ms Native WinRT OCR Text Grounding
+        # OCR runs in ~12ms and covers browsers, Electron, and native text equally well.
+        screen_offset_x = 0
+        screen_offset_y = 0
+        img = None
+
+        if region is not None:
+            rx, ry, rw, rh = region
+            img = capture_screen(bbox=(rx, ry, rw, rh))
+            screen_offset_x = rx
+            screen_offset_y = ry
+        elif target_window:
+            win = find_window(target_window)
+            if win:
+                img = capture_window(win["hwnd"])
+                bounds = win.get("bounds", [0, 0, 0, 0])
+                screen_offset_x = max(0, bounds[0])
+                screen_offset_y = max(0, bounds[1])
+
+        if img is None:
+            img = capture_screen()
+            screen_offset_x = 0
+            screen_offset_y = 0
+
+        # Spot text instantly via WinRT OCR
+        match = self.ocr.find_text(img, q)
+        if match:
+            local_bbox = match["bbox"]
+            local_center = match["center"]
+
+            abs_x = screen_offset_x + local_bbox[0]
+            abs_y = screen_offset_y + local_bbox[1]
+            abs_w = local_bbox[2]
+            abs_h = local_bbox[3]
+            abs_cx = screen_offset_x + local_center[0]
+            abs_cy = screen_offset_y + local_center[1]
+
+            return {
+                "name": match.get("text", q),
+                "role": role or "TextElement",
+                "bbox": [abs_x, abs_y, abs_w, abs_h],
+                "center": (abs_cx, abs_cy),
+                "source": "ocr",
+                "confidence": match.get("confidence", 0.9),
+            }
+
+        # Fallback: Windows UI Automation (for native controls when OCR doesn't match)
         try:
             uia_match = find_element_by_query(
                 target=target_window,
@@ -96,56 +140,6 @@ class ElementLocator:
                     }
         except Exception:
             pass
-
-        # -------------------------------------------------------------
-        # Tier 2: Native WinRT OCR Text Grounding (Web & GPU Apps)
-        # -------------------------------------------------------------
-        # Capture the relevant visual frame
-        screen_offset_x = 0
-        screen_offset_y = 0
-        img = None
-
-        if region is not None:
-            rx, ry, rw, rh = region
-            img = capture_screen(bbox=(rx, ry, rw, rh))
-            screen_offset_x = rx
-            screen_offset_y = ry
-        elif target_window:
-            win = find_window(target_window)
-            if win:
-                img = capture_window(win["hwnd"])
-                bounds = win.get("bounds", [0, 0, 0, 0])
-                screen_offset_x = max(0, bounds[0])
-                screen_offset_y = max(0, bounds[1])
-        
-        if img is None:
-            # Default to full virtual screen
-            img = capture_screen()
-            screen_offset_x = 0
-            screen_offset_y = 0
-
-        # Perform high-speed OCR text match
-        match = self.ocr.find_text(img, q)
-        if match:
-            local_bbox = match["bbox"]  # [lx, ly, lw, lh]
-            local_center = match["center"]  # [lcx, lcy]
-
-            # Map from image-local coordinates to absolute physical screen coordinates
-            abs_x = screen_offset_x + local_bbox[0]
-            abs_y = screen_offset_y + local_bbox[1]
-            abs_w = local_bbox[2]
-            abs_h = local_bbox[3]
-            abs_cx = screen_offset_x + local_center[0]
-            abs_cy = screen_offset_y + local_center[1]
-
-            return {
-                "name": match.get("text", q),
-                "role": role or "TextElement",
-                "bbox": [abs_x, abs_y, abs_w, abs_h],
-                "center": (abs_cx, abs_cy),
-                "source": "ocr",
-                "confidence": match.get("confidence", 0.9),
-            }
 
         return None
 

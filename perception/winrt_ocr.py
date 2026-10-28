@@ -145,7 +145,7 @@ class WinRtOcrEngine:
         # 2. Substring in single word (e.g. "Download" in "Downloads")
         for w in words:
             word_clean = w["text"].strip().lower()
-            if query_norm in word_clean or word_clean in query_norm:
+            if query_norm in word_clean or (len(word_clean) >= 4 and word_clean in query_norm):
                 return {
                     "text": w["text"],
                     "bbox": [w["x"], w["y"], w["w"], w["h"]],
