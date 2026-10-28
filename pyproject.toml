@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "computercontrol-aim-vr"
+version = "3.0.0"
+authors = [
+  { name = "Arman", email = "rangooniarman@gmail.com" },
+]
+description = "Industrial SOTA Windows Computer Control & Desktop Automation System (AIM-VR 3.0)"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Operating System :: Microsoft :: Windows :: Windows 10",
+    "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Hardware :: Symmetric Multi-processing",
+]
+dependencies = [
+    "Pillow>=9.0.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/Arman4464/computer-control-aim-vr"
+"Bug Tracker" = "https://github.com/Arman4464/computer-control-aim-vr/issues"
+
+[project.scripts]
+aimvr = "cli:main"

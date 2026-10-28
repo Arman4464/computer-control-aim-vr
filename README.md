@@ -1,0 +1,251 @@
+# Windows Computer Control (AIM-VR 3.0)
+
+[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue.svg)](https://microsoft.com)
+[![Python](https://img.shields.io/badge/Python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
+[![MCP Version](https://img.shields.io/badge/MCP-2024--11--05-green.svg)](https://modelcontextprotocol.io/)
+[![Tests](https://img.shields.io/badge/Tests-62%2F62%20Passing%20(100%25)-brightgreen.svg)](tests/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+**Autonomous In-Memory Vision Runner (AIM-VR 3.0)** is an industrial-grade desktop automation and computer control engine engineered specifically for LLMs and AI agents operating on Windows 10 and 11.
+
+Unlike standard vision-agent frameworks that suffer from sluggish multi-turn screenshot round-trips, coordinate misalignment, and desktop contention, AIM-VR 3.0 delivers **sub-30ms closed-loop execution**, **sub-15ms local native WinRT OCR**, **zero-token COM connectors**, **isolated Picture-in-Picture (PiP) sandboxing**, and **speculative Action DAG orchestration**.
+
+---
+
+## Key Capabilities
+
+- **Zero-Token High-Speed COM Connectors**: Direct object-model automation for File Explorer (`Shell.Application`), Microsoft Excel (`Excel.Application`), and Chromium browsers (`Chrome/Edge CDP`) without taking screenshots or consuming LLM vision tokens.
+- **Speculative Action DAG Engine**: Declare non-linear execution graphs with topological sorting, variable interpolation (`{{steps.id.result}}`), and closed-loop micro-servoing verification.
+- **Isolated Virtual Desktop Sandboxing**: Spawn background tasks on dedicated Win32 desktops (`AIMVR_Sandbox`) with real-time Picture-in-Picture (PiP) preview. Zero mouse/keyboard cursor hijacking.
+- **Sub-15ms Local Native WinRT OCR**: Persistent background PowerShell daemon tapping hardware-accelerated Windows Runtime OCR with zero API latency and zero cloud costs.
+- **OmniParser V2 Set-of-Marks (SOM)**: Hierarchical element detection with Non-Maximum Suppression (NMS) and numbered badge overlays for deterministic visual grounding.
+- **Per-Monitor DPI Aware V2**: Exact physical-to-virtual coordinate transformations handling mixed-DPI setups and negative coordinate multi-monitor arrays.
+- **Native Win32 Clipboard Bridge**: Atomic text injection via global Win32 memory allocations and simulated `Ctrl+V` for instantaneous multi-line code and text insertion.
+- **Window State & Lifecycle Hardening**: Targeted `WM_CLOSE` / `SC_CLOSE` message dispatch, window snapping (grid, quadrants, monitor work area), and elevated process awareness.
+- **Desktop Contention Governor**: Real-time user physical mouse contention detection and configurable corner failsafe (`(0,0)` abort).
+
+---
+
+## System Architecture
+
+```
+                                  +-----------------------+
+                                  |   AI Agent / LLM      |
+                                  +-----------------------+
+                                              |
+                        +---------------------+---------------------+
+                        |                                           |
+               MCP JSON-RPC (Stdio)                               CLI
+                        |                                           |
+                        +---------------------+---------------------+
+                                              v
+                                  +-----------------------+
+                                  |   server.py / cli.py  |
+                                  +-----------------------+
+                                              |
+        +-------------------------------------+-------------------------------------+
+        |                                     |                                     |
+        v                                     v                                     v
++-------------------------------+ +-------------------------------+ +-------------------------------+
+|     Perception Subsystem      | |      Control Subsystem        | |     Isolation & Connectors    |
+|-------------------------------| |-------------------------------| |-------------------------------|
+| * WinRT OCR Daemon (<15ms)    | | * Per-Monitor DPI V2 Engine   | | * Shell.Application COM       |
+| * UI Automation (UIA) Tree    | | * Hardware ScanCode Hotkeys   | | * Excel.Application COM       |
+| * GDI / PrintWindow Capture   | | * Win32 Clipboard Injection   | | * Chrome / Edge CDP           |
+| * Differential Dirty-Rects    | | * Window Layout / Snapping    | | * Win32 Virtual Desktop       |
+| * OmniParser V2 SOM Badging   | | * Visual Servoing (<30ms)     | | * PiP Sandbox Compositor      |
+| * Multi-Monitor Geometries    | | * Safety Contention Governor  | | * Speculative DAG Engine      |
++-------------------------------+ +-------------------------------+ +-------------------------------+
+```
+
+---
+
+## Cardinal Operating Invariants
+
+Every agent or operator using AIM-VR 3.0 must adhere to five non-negotiable rules:
+
+1. **NEVER SEND BLIND DESTRUCTIVE SHORTCUTS (`Alt+F4` / `Ctrl+W`)**: Global shortcuts strike whichever window happens to have foreground focus. Always use targeted `close_window(target="...")` which delivers Win32 `WM_CLOSE` messages directly to the target HWND without disturbing other apps.
+2. **PREFER NATIVE CLIPBOARD FOR LONG TEXT / CODE**: For code, URLs, or paragraphs, always use `clipboard(action="paste", text="...")` or the `paste_text` step. Keystroke simulation (`type_text`) is slower and prone to dropped characters under load.
+3. **VERIFY SCREEN STATE BEFORE ACTING ("Look Before You Touch")**: Inspect open windows and foreground focus using `get_screen_info` before triggering state changes.
+4. **SINGLE-TURN MULTI-STEP PREFERENCE**: Dispatch sequential actions using `execute_autonomous_task` or `execute_action_dag` to execute locally in an in-memory closed loop rather than making slow multi-turn chat calls.
+5. **WORKSPACE & WINDOW STATE RESTORATION ("Leave No Trace")**:
+   - If an application was unminimized to read data, **minimize it back** once done (`manage_window(target="...", action="state", state="minimize")`).
+   - If a helper app was opened solely to perform a task, **close it cleanly** (`close_window(target="...")`).
+   - Always **restore foreground focus** to the user's primary application when complete.
+
+---
+
+## Model Context Protocol (MCP) Tools Reference
+
+AIM-VR 3.0 exposes 29 specialized MCP tools adhering to protocol version `2024-11-05`:
+
+### 1. High-Speed COM & Browser Connectors
+| Tool | Arguments | Purpose |
+|---|---|---|
+| `com_explorer` | `action` (`list`/`open`/`get_selected`), `path` | Zero-token direct Shell.Application navigation, folder listing, and selected items. |
+| `com_excel` | `action` (`status`/`read_cell`/`write_cell`/`read_range`), `cell`, `value`, `sheet`, `rows`, `cols` | Direct Excel COM worksheet read/write; zero screenshot latency. |
+| `com_browser_cdp` | `action` (`list_tabs`/`navigate`/`evaluate_script`), `port`, `target_id`, `url`, `expression` | Chrome/Edge Chrome DevTools Protocol tab management and evaluation. |
+
+### 2. Autonomous Execution & Orchestration
+| Tool | Arguments | Purpose |
+|---|---|---|
+| `execute_action_dag` | `steps` (list), `stop_on_error` (bool), `auto_verify` (bool) | Non-linear Action DAG execution with dependency resolution and variable interpolation. |
+| `execute_autonomous_task` | `steps` (list), `verify` (bool) | In-memory closed-loop runner with sub-30ms pixel-diff verification. |
+
+### 3. Virtual Desktop & PiP Sandboxing
+| Tool | Arguments | Purpose |
+|---|---|---|
+| `sandbox_launch` | `command` (string), `desktop_name` (string) | Spawns applications on an isolated background Win32 desktop. |
+| `sandbox_manage` | `action` (`status`/`close_window`/`destroy`), `target` | Inspects, closes, or terminates sandboxed desktop environments. |
+| `sandbox_capture` | `desktop_name` (string) | Generates a Picture-in-Picture composite preview of background desktop windows. |
+
+### 4. Perception & Grounding
+| Tool | Arguments | Purpose |
+|---|---|---|
+| `get_screen_info` | None | Returns screen bounds, monitors, DPI scaling, foreground window, and visible windows list. |
+| `ocr_screen` | `target` (string), `query` (string) | Sub-15ms local WinRT OCR spotting and bounding box extraction. |
+| `screenshot` | `target` (string), `mode` (`full`/`delta`/`pip`), `som` (bool) | Screen capture with optional differential cropping or OmniParser Set-of-Marks badges. |
+| `inspect_ui` | `target` (string), `max_depth` (int), `max_elements` (int) | Low-token hierarchical text dump of the Windows UI Automation (UIA) tree. |
+
+### 5. Input Control & Window Management
+| Tool | Arguments | Purpose |
+|---|---|---|
+| `click` | `query`, `target`, `mark_id`, `x`, `y`, `clicks`, `button` | Multi-tier click resolution: UIA -> OCR -> SOM -> coordinates. |
+| `hover` | `query`, `target`, `x`, `y`, `duration` | Moves cursor and hovers to trigger tooltips or flyout menus. |
+| `move_cursor` | `x`, `y`, `coords_mode` | Per-Monitor DPI aware cursor positioning. |
+| `mouse_down` / `mouse_up` | `button` (`left`/`right`/`middle`) | Atomic mouse button press and release. |
+| `drag` | `start_x`, `start_y`, `end_x`, `end_y`, `duration` | Smooth bezier/interpolated mouse drag. |
+| `scroll` | `clicks` (int), `x` (float), `y` (float) | Hardware mouse wheel scrolling. |
+| `type_text` | `text` (string), `interval` (float) | Direct Unicode key event injection (`KEYEVENTF_UNICODE`). |
+| `hotkey` | `keys` (list) | Hardware scan-code combinations (`ctrl`, `alt`, `win`, `shift`, etc.). |
+| `press_key` | `key` (string), `down` (bool), `up` (bool) | Granular hardware key down/up event control. |
+| `clipboard` | `action` (`get`/`set`/`paste`), `text`, `restore` | Win32 native clipboard manager with instant paste simulation. |
+| `manage_window` | `target`, `action` (`snap`/`state`/`move_resize`), `position`, `state`, `bounds` | Snaps window to monitor work area regions or toggles minimize/maximize/restore. |
+| `focus_window` | `target` (string) | Bypasses `LockSetForegroundWindow` to bring window to verified foreground. |
+| `close_window` | `target` (string), `force` (bool) | Targeted non-destructive `WM_CLOSE` window closure. |
+| `launch_app` | `name` (string), `args` (string) | Intelligent application resolution via App Paths, PATH, and ShellExecute. |
+| `control_media` | `action` (`volume_up`/`volume_down`/`toggle_mute`/`play_pause`/etc.), `steps` | Non-invasive hardware multimedia control. |
+| `configure_safety` | `speed`, `failsafe`, `contention`, `desktop_mode` | Adjusts execution delay, corner abort, and desktop mode. |
+
+---
+
+## Unified Command-Line Interface (`cli.py`)
+
+Run actions, inspect UI, or execute full DAG pipelines directly from the terminal:
+
+```powershell
+# 1. Inspect screen, monitors, foreground, and all open windows
+python cli.py info
+
+# 2. Direct File Explorer COM navigation
+python cli.py explorer --list
+python cli.py explorer --open "shell:Downloads"
+python cli.py explorer --selected
+
+# 3. Direct Excel COM read / write
+python cli.py excel --status
+python cli.py excel --write A1 "Automated"
+python cli.py excel --read A1
+
+# 4. Window snapping and management
+python cli.py window "Notepad" --snap left
+python cli.py window "Chrome" --state minimize
+python cli.py close "Notepad"
+
+# 5. Native Win32 instant clipboard paste
+python cli.py clipboard --paste "Instant multiline code insertion"
+
+# 6. Local WinRT OCR text recognition
+python cli.py ocr --query "Downloads"
+
+# 7. Hardware multimedia control
+python cli.py media volume_up --steps 2
+python cli.py media play_pause
+
+# 8. PiP Sandbox desktop management
+python cli.py sandbox --launch "notepad.exe"
+python cli.py sandbox --status
+python cli.py sandbox --capture
+python cli.py sandbox --destroy
+
+# 9. Execute Speculative Action DAG
+python cli.py dag '[{"id": "open", "action": "launch_app", "name": "notepad"}, {"id": "snap", "action": "manage_window", "target": "Notepad", "sub_action": "snap", "position": "left", "depends_on": ["open"]}]'
+```
+
+---
+
+## Installation & Setup
+
+### Prerequisites
+- **Operating System**: Windows 10 (1809+) or Windows 11 (64-bit recommended).
+- **Python**: 3.9 or higher.
+- **PowerShell**: Built-in Windows PowerShell 5.1 or PowerShell 7+ (used for native WinRT OCR and COM bridging).
+
+### Quickstart
+
+1. **Clone the repository**:
+   ```powershell
+   git clone https://github.com/Arman4464/computer-control-aim-vr.git
+   cd computer-control-aim-vr
+   ```
+
+2. **Install dependencies**:
+   ```powershell
+   pip install -r requirements.txt
+   ```
+
+3. **Run the automated test suite**:
+   ```powershell
+   python -m unittest discover -s tests -v
+   ```
+   *All 62 tests should pass with 100% success rate.*
+
+---
+
+## MCP Server Configuration
+
+To attach AIM-VR 3.0 to Antigravity, Claude Desktop, Cursor, or any MCP-compatible agent host:
+
+Add to your `mcpSettings.json` or `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "computer-control": {
+      "command": "python",
+      "args": [
+        "C:\\path\\to\\computer-control-aim-vr\\server.py"
+      ]
+    }
+  }
+}
+```
+
+---
+
+## Testing & Quality Assurance
+
+The codebase includes an exhaustive test suite verifying every component against live Win32 APIs:
+
+```powershell
+# Run the complete test suite
+python -m unittest discover -s tests -v
+```
+
+### Covered Test Matrix:
+- Multi-monitor negative-offset coordinate transformations & Per-Monitor DPI V2 scaling.
+- Scan-code translation with OEM symbol protection (semicolons, quotes, slashes).
+- Win32 clipboard global memory allocation round-trips.
+- Monitor work-area window snapping and aspect ratios.
+- Safety governor speed profiles, corner failsafe, and user contention detection.
+- WinRT OCR daemon integration and bounding box accuracy.
+- OmniParser V2 Set-of-Marks, Intersection-over-Union (IoU), and Non-Maximum Suppression (NMS).
+- Speculative Action DAG execution, cycle detection, and template variable substitution.
+- Virtual Desktop creation, struct alignment, and PiP compositing.
+- Stdio JSON-RPC pipeline compatibility (`Content-Type` / `Content-Length` headers).
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE) — see the LICENSE file for details.

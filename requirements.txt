@@ -1,0 +1,5 @@
+# Core dependencies
+Pillow>=9.0.0
+
+# Optional enhancements
+# pywin32>=306; sys_platform == 'win32'

@@ -1,0 +1,1 @@
+{"name":"mouse_up","description":"Releases a held mouse button.","parameters":{"additionalProperties":false,"properties":{"button":{"default":"left","enum":["left","right","middle"],"type":"string"}},"type":"object"}}

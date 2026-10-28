@@ -1,0 +1,1 @@
+{"name":"focus_window","description":"Restores and brings a window to the foreground by title substring.","parameters":{"additionalProperties":false,"properties":{"target":{"description":"Window title substring.","type":"string"}},"required":["target"],"type":"object"}}
