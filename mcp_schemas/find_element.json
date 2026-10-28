@@ -1,0 +1,23 @@
+{
+  "name": "find_element",
+  "description": "Locates a UI element by text, label, or role using hybrid UIA + sub-15ms WinRT OCR. Returns its exact physical screen bounding box [x, y, w, h] and center (cx, cy) coordinates.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Text, label, or element name to spot on screen (e.g. 'Post', 'Apply', 'Discussion', 'Save', 'Cancel')."
+      },
+      "target": {
+        "type": "string",
+        "description": "Optional window title substring to scope search (e.g. 'Chrome', 'Notepad'). Defaults to full screen or foreground window."
+      },
+      "role": {
+        "type": "string",
+        "description": "Optional semantic role filter (e.g. 'Button', 'MenuItem', 'Tab', 'Edit')."
+      }
+    },
+    "required": ["query"],
+    "additionalProperties": false
+  }
+}

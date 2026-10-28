@@ -22,6 +22,7 @@ from perception.uia_inspector import (
 from perception.winrt_ocr import default_ocr, WinRtOcrEngine
 from perception.visual_som import default_som, VisualSOM
 from perception.screen_recorder import default_recorder, ScreenRecorder
+from perception.element_locator import default_locator, ElementLocator
 
 __all__ = [
     "default_capture_manager",
@@ -43,4 +44,6 @@ __all__ = [
     "VisualSOM",
     "default_recorder",
     "ScreenRecorder",
+    "default_locator",
+    "ElementLocator",
 ]

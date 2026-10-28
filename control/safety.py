@@ -110,21 +110,25 @@ def run_in_interactive_desktop(func, *args, timeout: float = 10.0, **kwargs):
 
 def ensure_interactive_desktop() -> bool:
     """
-    Attaches current thread to the interactive user desktop ('Default')
-    in WinSta0 if needed.
+    Attaches current thread to the interactive user input desktop ('Default' in WinSta0)
+    to ensure 100% reliable physical cursor reading and event dispatch across worker
+    threads and background subshell sessions.
     """
     global _desktop_handle
     try:
         tid = kernel32.GetCurrentThreadId()
-        h_desk = user32.GetThreadDesktop(tid)
-        if h_desk:
-            return True
-
+        h_cur = user32.GetThreadDesktop(tid)
         h_input = user32.OpenInputDesktop(0, False, 0x01FF)
         if h_input:
-            res = user32.SetThreadDesktop(h_input)
-            _desktop_handle = h_input
-            return bool(res)
+            if h_cur != h_input:
+                res = user32.SetThreadDesktop(h_input)
+                if res:
+                    _desktop_handle = h_input
+                    return True
+                # If thread already has open UI windows/hooks, it retains its existing valid desktop
+                return bool(h_cur)
+            return True
+        return bool(h_cur)
     except Exception as e:
         sys.stderr.write(f"[Safety] ensure_interactive_desktop error: {e}\n")
     return False

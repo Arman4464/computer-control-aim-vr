@@ -51,6 +51,7 @@ from perception.uia_inspector import (
 )
 from perception.visual_som import default_som
 from perception.winrt_ocr import default_ocr
+from perception.element_locator import default_locator
 from control.visual_servoing import default_servoing
 from control.virtual_desktop import default_virtual_desktop
 from control.com_connectors import default_com_manager
@@ -148,10 +149,14 @@ TOOLS_DEFINITIONS = [
     },
     {
         "name": "click",
-        "description": "Performs a mouse click. Can click raw pixel coordinates (x, y), a Set-of-Marks mark ID (mark_id), or a semantic UIA control (element_name, element_role).",
+        "description": "Performs a mouse click. Can click raw pixel coordinates (x, y), a Set-of-Marks mark ID (mark_id), a dynamic text label (text/query) via sub-15ms WinRT OCR, or a semantic UIA control (element_name, element_role).",
         "inputSchema": {
             "type": "object",
             "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Dynamic text or button label to locate and click in real-time (e.g. 'Post', 'Apply', 'Discussion', 'Save', 'Submit'). Automatically resolves live screen center via UIA + WinRT OCR.",
+                },
                 "query": {
                     "type": "string",
                     "description": "Universal semantic click query. Can be any button name, folder, tab, menu, or taskbar icon (e.g. 'Downloads', 'Save', 'File Explorer', 'Start'). Resolves to exact center coordinates in <0.2s without taking a screenshot.",
@@ -199,6 +204,29 @@ TOOLS_DEFINITIONS = [
                     "description": "Optional window title substring to target. Restricts interaction to this window and ensures it is focused.",
                 },
             },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "find_element",
+        "description": "Locates a UI element by text, label, or role using hybrid UIA + sub-15ms WinRT OCR. Returns its exact physical screen bounding box [x, y, w, h] and center (cx, cy) coordinates.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Text, label, or element name to spot on screen (e.g. 'Post', 'Apply', 'Discussion', 'Save', 'Cancel').",
+                },
+                "target": {
+                    "type": "string",
+                    "description": "Optional window title substring to scope search (e.g. 'Chrome', 'Notepad'). Defaults to full screen or foreground window.",
+                },
+                "role": {
+                    "type": "string",
+                    "description": "Optional semantic role filter (e.g. 'Button', 'MenuItem', 'Tab', 'Edit').",
+                },
+            },
+            "required": ["query"],
             "additionalProperties": False,
         },
     },
@@ -1068,11 +1096,39 @@ class MCPServer:
             }
             return [{"type": "text", "text": json.dumps(summary, indent=2)}], False
 
+        elif name == "find_element":
+            q = args.get("query")
+            target = args.get("target")
+            role = args.get("role")
+            if not q:
+                return [{"type": "text", "text": "Error: Missing required 'query' parameter."}], True
+
+            elem = default_locator.locate(query=q, target_window=target, role=role)
+            if not elem:
+                return [{"type": "text", "text": f"Element matching '{q}' not found via UIA or OCR on screen."}], False
+
+            return [{
+                "type": "text",
+                "text": json.dumps(
+                    {
+                        "status": "found",
+                        "query": q,
+                        "name": elem["name"],
+                        "role": elem["role"],
+                        "bbox": elem["bbox"],
+                        "center": elem["center"],
+                        "source": elem["source"],
+                        "confidence": elem["confidence"],
+                    },
+                    indent=2,
+                ),
+            }], False
+
         elif name == "click":
             x = args.get("x")
             y = args.get("y")
             mark_id = args.get("mark_id")
-            query = args.get("query")
+            query = args.get("query") or args.get("text")
             elem_name = args.get("element_name") or query
             elem_role = args.get("element_role")
             target = args.get("target")
@@ -1082,7 +1138,7 @@ class MCPServer:
 
             # Validate that at least one target parameter is provided
             if x is None and y is None and mark_id is None and not elem_name:
-                return [{"type": "text", "text": "Error: Missing target to click. Provide 'query' (e.g. query='Downloads'), 'mark_id', or coordinates (x, y)."}], True
+                return [{"type": "text", "text": "Error: Missing target to click. Provide 'text'/'query' (e.g. text='Post'), 'mark_id', or coordinates (x, y)."}], True
 
             # Validate coordinate pairing
             if (x is not None and y is None) or (x is None and y is not None):
@@ -1097,6 +1153,7 @@ class MCPServer:
 
             target_x = None
             target_y = None
+            source_tag = ""
 
             if mark_id is not None:
                 mark = default_som.resolve_mark(mark_id)
@@ -1106,15 +1163,17 @@ class MCPServer:
                 target_y = mark["center_y"]
                 target_bbox = mark["bbox"]
                 coords_mode = "pixel"
+                source_tag = f" [mark #{mark_id}]"
 
             elif elem_name is not None or elem_role is not None:
-                elem = find_element_by_query(target=target, name=elem_name, role=elem_role)
+                elem = default_locator.locate(query=elem_name, target_window=target, role=elem_role)
                 if not elem:
-                    return [{"type": "text", "text": f"Error: Element matching name='{elem_name}' role='{elem_role}' not found in UIA tree or OCR."}], True
+                    return [{"type": "text", "text": f"Error: Element matching text/label '{elem_name}' (role={elem_role}) not found via UIA or OCR on screen."}], True
                 target_x = elem["center"][0]
                 target_y = elem["center"][1]
                 target_bbox = elem["bbox"]
                 coords_mode = "pixel"
+                source_tag = f" [resolved '{elem_name}' via {elem['source'].upper()}]"
 
             elif x is not None and y is not None:
                 target_x, target_y, coords_mode = self._project_coordinates(x, y, coords_mode, target=target)
@@ -1127,7 +1186,7 @@ class MCPServer:
             cx, cy = default_mouse.click(x=target_x, y=target_y, button=btn, clicks=clicks, coords_mode=coords_mode)
             reaction = default_servoing.verify_reaction(pre_state, bbox=eff_bbox)
 
-            msg = f"Clicked {btn} (clicks={clicks}) at ({cx}, {cy}). Reaction: {reaction['details']} ({reaction['latency_ms']}ms)"
+            msg = f"Clicked {btn} (clicks={clicks}) at ({cx}, {cy}){source_tag}. Reaction: {reaction['details']} ({reaction['latency_ms']}ms)"
             return [{"type": "text", "text": msg}], False
 
         elif name == "move_cursor":

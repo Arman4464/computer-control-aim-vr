@@ -302,6 +302,20 @@ class MouseEngine:
         else:
             cur_x, cur_y = self.get_position()
 
+        # Auto-activate window under cursor if not current foreground to prevent WM_ACTIVATE swallowing
+        try:
+            ensure_interactive_desktop()
+            pt = POINT(cur_x, cur_y)
+            hwnd_target = user32.WindowFromPoint(pt)
+            if hwnd_target:
+                hwnd_root = user32.GetAncestor(hwnd_target, 2)  # GA_ROOT = 2
+                hwnd_fg = user32.GetForegroundWindow()
+                if hwnd_root and hwnd_root != hwnd_fg:
+                    user32.SetForegroundWindow(hwnd_root)
+                    time.sleep(0.02)
+        except Exception:
+            pass
+
         btn = button.lower()
         for i in range(clicks):
             if i > 0:
