@@ -170,6 +170,17 @@ class SafetyGovernor:
         self.last_action_time: float = 0.0
         self.contention_threshold_px = 15.0  # px delta indicating human movement
         self.contention_cooldown_s = 0.5     # seconds to yield after human movement
+        self._custom_delay: float | None = None
+
+    @property
+    def action_delay(self) -> float:
+        if self._custom_delay is not None:
+            return self._custom_delay
+        return self.SPEED_PROFILES.get(self.speed, 0.15)
+
+    @action_delay.setter
+    def action_delay(self, val: float):
+        self._custom_delay = max(0.0, float(val))
 
     def configure(
         self,
@@ -180,6 +191,7 @@ class SafetyGovernor:
     ):
         if speed is not None and speed in self.SPEED_PROFILES:
             self.speed = speed
+            self._custom_delay = None
         if failsafe is not None:
             self.failsafe_enabled = bool(failsafe)
         if contention is not None:
@@ -253,7 +265,7 @@ class SafetyGovernor:
             self.last_agent_pos = get_physical_cursor_pos()
 
         self.last_action_time = time.time()
-        delay = self.SPEED_PROFILES.get(self.speed, 0.15)
+        delay = self.action_delay
         if delay > 0:
             time.sleep(delay)
 

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1A73E8"/>
+      <stop offset="100%" stop-color="#4285F4"/>
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A8C7FA"/>
+      <stop offset="100%" stop-color="#80B3FF"/>
+    </linearGradient>
+  </defs>
+  <!-- Background Rounded Shield -->
+  <rect x="2" y="2" width="44" height="44" rx="12" fill="#1E1F20" stroke="#444746" stroke-width="1.5"/>
+  <!-- Monitor Display Frame -->
+  <rect x="8" y="9" width="32" height="23" rx="3.5" fill="#131314" stroke="#8E918F" stroke-width="1.5"/>
+  <!-- Stand & Base -->
+  <path d="M22 32 L22 37 L16 37 A1.5 1.5 0 0 0 16 39 L32 39 A1.5 1.5 0 0 0 32 37 L26 37 L26 32" stroke="#8E918F" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Screen Grid / Sandbox Border -->
+  <rect x="11" y="12" width="26" height="17" rx="2" fill="#1E1F20" stroke="rgba(168, 199, 250, 0.25)" stroke-width="1" stroke-dasharray="2,2"/>
+  <!-- Glowing Target Pulse / Neural Cursor -->
+  <circle cx="21" cy="19" r="3.5" fill="none" stroke="#A8C7FA" stroke-width="1.2"/>
+  <circle cx="21" cy="19" r="1.5" fill="#A8C7FA"/>
+  <!-- Motion Vector Arrow / Autonomous Control -->
+  <path d="M21 19 L30 24 L26 25 L28 29 L26 30 L24 26 L21 28 Z" fill="url(#bgGrad)" stroke="#E8EAED" stroke-width="0.8"/>
+  <!-- High-Speed Status Orb -->
+  <circle cx="35" cy="13" r="2" fill="#6DD58C"/>
+</svg>

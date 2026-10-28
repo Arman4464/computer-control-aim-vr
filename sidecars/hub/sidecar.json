@@ -1,0 +1,23 @@
+{
+  "command": "python",
+  "args": [
+    "server.py"
+  ],
+  "env": {
+    "AIMVR_SIDECAR": "1"
+  },
+  "restart_policy": "always",
+  "display_name": "Computer Control Hub",
+  "description": "Interactive visual dashboard, real-time desktop diagnostics, and control options for AIM-VR 3.0.",
+  "has_web_ui": true,
+  "ui_config": {
+    "display_name": "Computer Control Hub",
+    "views": [
+      {
+        "title": "Computer Control",
+        "path": "/",
+        "entrypoint": "SIDECAR_UI_ENTRYPOINT_AUX_PANE"
+      }
+    ]
+  }
+}

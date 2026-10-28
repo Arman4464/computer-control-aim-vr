@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Windows Computer Control Hub</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body class="dark-theme">
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo-box">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#A8C7FA" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+        </div>
+        <div>
+          <h1 class="header-title">Computer Control</h1>
+          <div class="header-sub">AIM-VR 3.0 Hub</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <span id="status-pill" class="pill pill-active">
+          <span class="pulse-dot"></span>
+          <span id="status-pill-text">Host Control</span>
+        </span>
+        <button id="btn-refresh" class="icon-btn" title="Refresh Diagnostics">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6"></path>
+            <path d="M1 20v-6h6"></path>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Navigation Bar -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="tab-control">Control & Safety</button>
+      <button class="tab-btn" data-tab="tab-windows">Windows & Layout</button>
+      <button class="tab-btn" data-tab="tab-sandbox">PiP Sandbox</button>
+      <button class="tab-btn" data-tab="tab-diagnostics">Diagnostics</button>
+    </nav>
+
+    <!-- Main Content Panels -->
+    <main class="content-viewport">
+      <!-- 1. Control & Safety Tab -->
+      <section id="tab-control" class="tab-panel active">
+        <!-- Target Execution Mode -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Execution Mode</span>
+            <span class="badge" id="current-mode-badge">Active</span>
+          </div>
+          <div class="mode-selector-grid">
+            <div class="mode-card active" id="mode-interactive" onclick="switchMode('interactive')">
+              <div class="mode-icon">🖥️</div>
+              <div class="mode-info">
+                <div class="mode-title">Host Desktop</div>
+                <div class="mode-desc">Direct control of current Windows screen</div>
+              </div>
+            </div>
+            <div class="mode-card" id="mode-isolated_pip" onclick="switchMode('isolated_pip')">
+              <div class="mode-icon">📦</div>
+              <div class="mode-info">
+                <div class="mode-title">Virtual Sandbox (PiP)</div>
+                <div class="mode-desc">Background desktop with zero cursor stealing</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Speed & Deliberation -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Execution Speed</span>
+            <span class="badge" id="speed-badge">Normal</span>
+          </div>
+          <div class="button-group" id="speed-group">
+            <button class="btn btn-chip" data-speed="fast" onclick="setSpeed('fast')">⚡ Turbo</button>
+            <button class="btn btn-chip active" data-speed="normal" onclick="setSpeed('normal')">⚖️ Balanced</button>
+            <button class="btn btn-chip" data-speed="step-by-step" onclick="setSpeed('step-by-step')">🛡️ Cautious</button>
+          </div>
+          <div class="slider-row">
+            <div class="slider-label">
+              <span>Action Delay:</span>
+              <span id="delay-val" class="mono-text">50ms</span>
+            </div>
+            <input type="range" id="delay-slider" min="0" max="1000" step="25" value="50" oninput="onDelayChange(this.value)">
+          </div>
+        </div>
+
+        <!-- Safety Invariants -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Safety & Contention Policy</span>
+          </div>
+          <div class="toggle-list">
+            <div class="toggle-item">
+              <div class="toggle-info">
+                <div class="toggle-title">User Mouse Contention Yield</div>
+                <div class="toggle-desc">Auto-pauses automation if you physically touch your mouse</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="contention-toggle" checked onchange="toggleSafety('contention', this.checked)">
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="toggle-item">
+              <div class="toggle-info">
+                <div class="toggle-title">Emergency Corner Failsafe (0, 0)</div>
+                <div class="toggle-desc">Instantly aborts tasks when cursor is slammed into top-left corner</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="failsafe-toggle" onchange="toggleSafety('failsafe', this.checked)">
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="toggle-item">
+              <div class="toggle-info">
+                <div class="toggle-title">Workspace State Restoration ("Leave No Trace")</div>
+                <div class="toggle-desc">Automatically re-minimizes inspected apps and restores focus</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="restore-toggle" checked disabled>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Windows & Layout Tab -->
+      <section id="tab-windows" class="tab-panel">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Foreground Application</span>
+          </div>
+          <div class="fg-window-box" id="fg-window-info">
+            <div class="loading-spinner"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Open Windows</span>
+            <span class="badge" id="win-count-badge">0 Windows</span>
+          </div>
+          <div class="window-list" id="window-list-container">
+            <div class="loading-spinner"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. PiP Sandbox Tab -->
+      <section id="tab-sandbox" class="tab-panel">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">PiP Sandbox Canvas</span>
+            <button class="btn btn-sm" onclick="refreshPreview()">📸 Capture Live</button>
+          </div>
+          <div class="preview-container">
+            <img id="preview-image" src="" alt="Screen Preview" class="preview-img">
+            <div id="preview-placeholder" class="preview-placeholder">
+              <div class="icon">🖼️</div>
+              <div>Click Capture Live to stream desktop frame</div>
+            </div>
+          </div>
+          <div class="sandbox-controls">
+            <input type="text" id="sandbox-launch-input" placeholder="Launch command (e.g. notepad.exe)" class="input-field">
+            <button class="btn btn-primary" onclick="launchInSandbox()">Launch in Sandbox</button>
+            <button class="btn btn-danger" onclick="destroySandbox()">Destroy Sandbox</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Diagnostics Tab -->
+      <section id="tab-diagnostics" class="tab-panel">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Screen & Monitor Hardware</span>
+          </div>
+          <div class="diag-grid" id="monitor-diag-container">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">System Connectors</span>
+          </div>
+          <div class="status-grid">
+            <div class="status-item">
+              <span class="status-label">WinRT OCR Daemon</span>
+              <span class="status-val badge badge-success">Hardware Fast (~15ms)</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Win32 Clipboard Bridge</span>
+              <span class="status-val badge badge-success">Atomic GlobalAlloc</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Shell.Application COM</span>
+              <span class="status-val badge badge-success">Zero-Token Direct</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Excel.Application COM</span>
+              <span class="status-val badge badge-success">Native Automation</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">DPI Awareness</span>
+              <span class="status-val badge badge-success">Per-Monitor V2</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer Quick Actions -->
+    <footer class="app-footer">
+      <button class="btn btn-footer" onclick="quickSnap('left')">◧ Snap Left</button>
+      <button class="btn btn-footer" onclick="quickSnap('right')">◨ Snap Right</button>
+      <button class="btn btn-footer" onclick="quickSnap('center')">▣ Center</button>
+      <button class="btn btn-footer" onclick="quickSnap('minimize')">_ Minimize</button>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

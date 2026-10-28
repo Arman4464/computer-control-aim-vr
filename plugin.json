@@ -1,0 +1,30 @@
+{
+  "name": "computer-control-plugin",
+  "displayName": "Windows Computer Control (AIM-VR 3.0)",
+  "version": "3.0.0",
+  "description": "Industrial OS desktop automation, sub-15ms native WinRT OCR, COM connectors, and PiP Virtual Desktop sandboxing.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Open File Explorer, go to Downloads, and organize recent files",
+    "Launch Notepad in PiP Virtual Sandbox and draft meeting notes",
+    "Inspect screen and snap active windows to left and right halves",
+    "Read cell B5 from the active Excel worksheet via COM"
+  ],
+  "author": {
+    "name": "Arman Rangooni",
+    "email": "rangooniarman@gmail.com"
+  },
+  "repository": "https://github.com/Arman4464/computer-control-aim-vr",
+  "license": "MIT",
+  "keywords": [
+    "computer-control",
+    "desktop-automation",
+    "aim-vr",
+    "windows",
+    "mcp",
+    "winrt-ocr",
+    "virtual-desktop",
+    "pip-sandbox",
+    "com-connectors"
+  ]
+}
