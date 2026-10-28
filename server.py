@@ -55,6 +55,7 @@ from control.visual_servoing import default_servoing
 from control.virtual_desktop import default_virtual_desktop
 from control.com_connectors import default_com_manager
 from control.dag_executor import default_dag_executor, DAGExecutor
+from perception.screen_recorder import default_recorder
 
 # Reconfigure stdout/stdin/stderr to strict UTF-8
 sys.stdin.reconfigure(encoding="utf-8")
@@ -751,6 +752,65 @@ TOOLS_DEFINITIONS = [
             "required": ["steps"],
             "additionalProperties": False,
         },
+    },
+    {
+        "name": "record_screen",
+        "description": "Continuous high-speed screen recorder. Captures smooth desktop or window streams and compiles them into animated WebP or GIF videos with optional physical mouse cursor stamping.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["start", "stop", "status", "pause", "resume"],
+                    "description": "Recorder action: 'start' initiates recording, 'stop' compiles and saves video file, 'status' reports telemetry, 'pause'/'resume' controls loop."
+                },
+                "output_path": {
+                    "type": "string",
+                    "description": "Destination file path for output video (e.g. 'assets/demo.webp' or 'assets/demo.gif'). Required when action is 'stop'."
+                },
+                "fps": {
+                    "type": "integer",
+                    "default": 15,
+                    "description": "Capture frame rate (5 to 30 FPS). Default is 15 FPS."
+                },
+                "target": {
+                    "type": "string",
+                    "description": "Optional window title substring to scope recording strictly to that application window."
+                },
+                "crop_region": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "Optional [x, y, w, h] pixel bounding box to record a specific region of interest."
+                },
+                "max_dim": {
+                    "type": "integer",
+                    "default": 800,
+                    "description": "Maximum resolution dimension (e.g. 720, 800, 1080) for downscaling. Default 800px ensures compact filesize."
+                },
+                "quality": {
+                    "type": "integer",
+                    "default": 75,
+                    "description": "Compression quality (1-100). Default 75."
+                },
+                "include_cursor": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Whether to render a visible hardware mouse pointer arrow onto the frames."
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["webp", "gif"],
+                    "default": "webp",
+                    "description": "Video animation format: 'webp' (24-bit truecolor high compression) or 'gif'."
+                },
+                "max_duration": {
+                    "type": "number",
+                    "default": 120.0,
+                    "description": "Safety timeout in seconds to auto-stop recording and prevent runaway memory usage."
+                }
+            },
+            "required": ["action"]
+        }
     },
 ]
 
@@ -1620,6 +1680,37 @@ class MCPServer:
                 "log": execution_log,
             }
             return [{"type": "text", "text": json.dumps(summary, indent=2)}], False
+
+        elif name == "record_screen":
+            action = args.get("action", "status")
+            if action == "start":
+                res = default_recorder.start(
+                    fps=int(args.get("fps", 15)),
+                    target=args.get("target"),
+                    crop_region=tuple(args["crop_region"]) if args.get("crop_region") else None,
+                    max_dim=int(args.get("max_dim", 800)),
+                    quality=int(args.get("quality", 75)),
+                    include_cursor=bool(args.get("include_cursor", True)),
+                    max_duration=float(args.get("max_duration", 120.0)),
+                )
+                return [{"type": "text", "text": json.dumps(res, indent=2)}], False
+            elif action == "stop":
+                out_path = args.get("output_path")
+                if not out_path:
+                    return [{"type": "text", "text": "Error: output_path is required to stop recording."}], True
+                fmt = args.get("format", "webp")
+                res = default_recorder.stop(output_path=out_path, format=fmt)
+                is_err = res.get("status") == "error"
+                return [{"type": "text", "text": json.dumps(res, indent=2)}], is_err
+            elif action == "pause":
+                res = default_recorder.pause()
+                return [{"type": "text", "text": json.dumps(res, indent=2)}], False
+            elif action == "resume":
+                res = default_recorder.resume()
+                return [{"type": "text", "text": json.dumps(res, indent=2)}], False
+            else:
+                res = default_recorder.status()
+                return [{"type": "text", "text": json.dumps(res, indent=2)}], False
 
         else:
             return [{"type": "text", "text": f"Unknown tool: '{name}'"}], True

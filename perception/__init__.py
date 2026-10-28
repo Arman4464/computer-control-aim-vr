@@ -1,5 +1,5 @@
 """
-Perception subsystem package for AIM-VR 2.0.
+Perception subsystem package for AIM-VR 3.0.
 """
 
 from perception.screen_capture import (
@@ -21,6 +21,7 @@ from perception.uia_inspector import (
 )
 from perception.winrt_ocr import default_ocr, WinRtOcrEngine
 from perception.visual_som import default_som, VisualSOM
+from perception.screen_recorder import default_recorder, ScreenRecorder
 
 __all__ = [
     "default_capture_manager",
@@ -40,4 +41,6 @@ __all__ = [
     "WinRtOcrEngine",
     "default_som",
     "VisualSOM",
+    "default_recorder",
+    "ScreenRecorder",
 ]

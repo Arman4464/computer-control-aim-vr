@@ -1,0 +1,59 @@
+{
+  "name": "record_screen",
+  "description": "Continuous high-speed screen recorder. Captures smooth desktop or window streams and compiles them into animated WebP or GIF videos with optional physical mouse cursor stamping.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["start", "stop", "status", "pause", "resume"],
+        "description": "Recorder action: 'start' initiates recording, 'stop' compiles and saves video file, 'status' reports telemetry, 'pause'/'resume' controls loop."
+      },
+      "output_path": {
+        "type": "string",
+        "description": "Destination file path for output video (e.g. 'assets/demo.webp' or 'assets/demo.gif'). Required when action is 'stop'."
+      },
+      "fps": {
+        "type": "integer",
+        "default": 15,
+        "description": "Capture frame rate (5 to 30 FPS). Default is 15 FPS."
+      },
+      "target": {
+        "type": "string",
+        "description": "Optional window title substring to scope recording strictly to that application window."
+      },
+      "crop_region": {
+        "type": "array",
+        "items": {"type": "integer"},
+        "description": "Optional [x, y, w, h] pixel bounding box to record a specific region of interest."
+      },
+      "max_dim": {
+        "type": "integer",
+        "default": 800,
+        "description": "Maximum resolution dimension (e.g. 720, 800, 1080) for downscaling. Default 800px ensures compact filesize."
+      },
+      "quality": {
+        "type": "integer",
+        "default": 75,
+        "description": "Compression quality (1-100). Default 75."
+      },
+      "include_cursor": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether to render a visible hardware mouse pointer arrow onto the frames."
+      },
+      "format": {
+        "type": "string",
+        "enum": ["webp", "gif"],
+        "default": "webp",
+        "description": "Video animation format: 'webp' (24-bit truecolor high compression) or 'gif'."
+      },
+      "max_duration": {
+        "type": "number",
+        "default": 120.0,
+        "description": "Safety timeout in seconds to auto-stop recording and prevent runaway memory usage."
+      }
+    },
+    "required": ["action"]
+  }
+}

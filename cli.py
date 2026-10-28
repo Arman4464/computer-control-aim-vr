@@ -172,6 +172,17 @@ def main():
     excel_parser.add_argument("--cols", type=int, default=10, help="Col count for range")
     excel_parser.add_argument("--sheet", help="Optional sheet name")
 
+    # 17. record: High-speed screen recording
+    rec_parser = subparsers.add_parser("record", help="High-speed continuous screen recorder")
+    rec_parser.add_argument("--start", action="store_true", help="Start recording loop")
+    rec_parser.add_argument("--stop", metavar="OUTPUT_PATH", help="Stop recording and compile video file")
+    rec_parser.add_argument("--status", action="store_true", help="Check active recorder telemetry")
+    rec_parser.add_argument("--fps", type=int, default=15, help="Capture frame rate (default 15)")
+    rec_parser.add_argument("--target", help="Scope capture to target window title")
+    rec_parser.add_argument("--format", choices=["webp", "gif"], default="webp", help="Video output format")
+    rec_parser.add_argument("--max-dim", type=int, default=800, help="Downscale max resolution (default 800)")
+    rec_parser.add_argument("--no-cursor", action="store_true", help="Disable physical cursor stamping")
+
     args = parser.parse_args()
 
     # Disable corner failsafe by default during CLI execution to avoid false-positives on parked cursor
@@ -398,6 +409,39 @@ def main():
             sys.exit(1 if is_err else 0)
         else:
             sys.stderr.write("Please specify --status, --read <cell>, --write <cell> <val>, or --range <cell>.\n")
+            sys.exit(1)
+
+    elif args.command == "record":
+        if args.start:
+            res, is_err = server.execute_tool(
+                "record_screen",
+                {
+                    "action": "start",
+                    "fps": args.fps,
+                    "target": args.target,
+                    "max_dim": args.max_dim,
+                    "include_cursor": not args.no_cursor,
+                }
+            )
+            print(res[0]["text"])
+            sys.exit(1 if is_err else 0)
+        elif args.stop:
+            res, is_err = server.execute_tool(
+                "record_screen",
+                {
+                    "action": "stop",
+                    "output_path": args.stop,
+                    "format": args.format,
+                }
+            )
+            print(res[0]["text"])
+            sys.exit(1 if is_err else 0)
+        elif args.status:
+            res, is_err = server.execute_tool("record_screen", {"action": "status"})
+            print(res[0]["text"])
+            sys.exit(1 if is_err else 0)
+        else:
+            sys.stderr.write("Please specify --start, --stop <path>, or --status for record.\n")
             sys.exit(1)
 
 
