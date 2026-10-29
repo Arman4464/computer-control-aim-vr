@@ -235,9 +235,12 @@ def main():
     macro_sub = macro_parser.add_subparsers(dest="macro_action", required=True)
 
     macro_rec = macro_sub.add_parser("record", help="Record a new macro")
-    macro_rec.add_argument("name", help="Macro name to record")
+    macro_rec.add_argument("name", nargs="?", default=None, help="Macro name to record or action ('start'/'stop')")
+    macro_rec.add_argument("--name", "-n", dest="opt_name", help="Macro name")
     macro_rec.add_argument("--target", "-t", help="Target window title substring")
     macro_rec.add_argument("--no-trajectories", action="store_true", help="Omit trajectory tracking")
+
+    macro_stop = macro_sub.add_parser("stop", help="Stop recording active macro")
 
     macro_play = macro_sub.add_parser("play", help="Play a recorded macro with 5-tier self-healing")
     macro_play.add_argument("name", help="Macro name to execute")
@@ -605,10 +608,28 @@ def main():
         sys.exit(1 if is_err else 0)
 
     elif args.command == "macro":
-        if args.macro_action == "record":
+        if args.macro_action in ["record", "stop"]:
+            is_stop = (args.macro_action == "stop") or (getattr(args, "name", None) == "stop")
+            if is_stop:
+                res, is_err = server.execute_tool("macro_record", {"action": "stop"})
+                print(res[0]["text"])
+                sys.exit(1 if is_err else 0)
+
+            # Determine macro name
+            m_name = getattr(args, "opt_name", None)
+            pos_name = getattr(args, "name", None)
+            if pos_name and pos_name != "start":
+                m_name = pos_name
+            elif not m_name and pos_name == "start":
+                m_name = getattr(args, "opt_name", None)
+
+            if not m_name:
+                sys.stderr.write("Error: Macro name is required (e.g. 'python cli.py macro record my_macro' or '--name my_macro').\n")
+                sys.exit(1)
+
             res, is_err = server.execute_tool("macro_record", {
                 "action": "start",
-                "name": args.name,
+                "name": m_name,
                 "target": getattr(args, "target", None),
                 "capture_trajectories": not getattr(args, "no_trajectories", False),
             })

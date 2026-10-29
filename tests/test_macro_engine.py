@@ -178,13 +178,15 @@ class TestMacroEngineLifecycle(unittest.TestCase):
                 {"id": "s1", "action": "click", "args": {"x": 200, "y": 300}, "anchor": None},
                 {"id": "s2", "action": "type_text", "args": {"text": "hello"}},
                 {"id": "s3", "action": "press_key", "args": {"key": "enter"}},
+                {"id": "s4", "action": "drag", "args": {"start_x": 100, "start_y": 100, "end_x": 200, "end_y": 200}},
+                {"id": "s5", "action": "scroll", "args": {"delta_y": -5, "delta_x": 2}},
             ],
         }
         res = self.engine.play_macro(macro_payload, speed_multiplier=10.0, dry_run=True)
         self.assertEqual(res["status"], "success")
-        self.assertEqual(res["executed_steps"], 3)
+        self.assertEqual(res["executed_steps"], 5)
         self.assertTrue(res["dry_run"])
-        self.assertEqual(len(res["trace"]), 3)
+        self.assertEqual(len(res["trace"]), 5)
 
     def test_delete_macro(self):
         self.engine.start_recording("to_delete")

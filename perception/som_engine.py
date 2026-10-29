@@ -560,7 +560,15 @@ class SoMEngine:
         except Exception:
             font = ImageFont.load_default()
 
-        for idx, elem in enumerate(elements, start=1):
+        sorted_elements = sorted(
+            elements,
+            key=lambda e: (
+                e.get("bbox", [0, 0, 0, 0])[1] // 25,
+                e.get("bbox", [0, 0, 0, 0])[0],
+            ),
+        )
+
+        for idx, elem in enumerate(sorted_elements, start=1):
             abs_x, abs_y, w, h = elem["bbox"]
             rel_x = abs_x - origin_x
             rel_y = abs_y - origin_y
