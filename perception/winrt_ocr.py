@@ -56,6 +56,7 @@ class WinRtOcrEngine:
                 stderr=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",
+                errors="replace",
                 bufsize=1,
             )
             # Wait for READY signal from daemon
@@ -96,7 +97,7 @@ class WinRtOcrEngine:
                     self._proc = None
                     raise RuntimeError("OCR daemon closed stdout unexpectedly.")
 
-                data = json.loads(response_line.strip())
+                data = json.loads(response_line.strip(), strict=False)
                 if isinstance(data, dict):
                     words = data.get("words", [])
                     if isinstance(words, dict):

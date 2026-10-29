@@ -103,10 +103,11 @@ class ExplorerCOMConnector:
         if not os.path.exists(abs_path):
             return {"status": "error", "message": f"Path not found: {abs_path}"}
 
+        escaped_abs_path = abs_path.replace('\\', '\\\\')
         ps = f"""
         $shell = New-Object -ComObject Shell.Application
         $shell.Open('{abs_path.replace("'", "''")}')
-        Write-Output '{{"status":"opened","path":"{abs_path.replace('\\', '\\\\')}"}}'
+        Write-Output '{{"status":"opened","path":"{escaped_abs_path}"}}'
         """
         res = self._run_ps_json(ps)
         if res and isinstance(res, dict):

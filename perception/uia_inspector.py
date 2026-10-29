@@ -298,7 +298,7 @@ def find_element_by_query(
             candidates = []
             for ctype in control_types:
                 try:
-                    ctrl = ctype(searchFrom=search_root, searchDepth=8, SubName=name)
+                    ctrl = ctype(searchFromControl=search_root, searchDepth=8, SubName=name)
                     if ctrl.Exists(0.15):
                         rect = ctrl.BoundingRectangle
                         w_px = rect.width()
@@ -332,7 +332,7 @@ def find_element_by_query(
                     try:
                         tb_ctrl = auto.ControlFromHandle(tb_hwnd)
                         for ctype in [auto.ButtonControl, auto.ListItemControl, auto.Control]:
-                            ctrl = ctype(searchFrom=tb_ctrl, searchDepth=6, SubName=name)
+                            ctrl = ctype(searchFromControl=tb_ctrl, searchDepth=6, SubName=name)
                             if ctrl.Exists(0.15):
                                 rect = ctrl.BoundingRectangle
                                 w_px = rect.width()
