@@ -98,7 +98,7 @@ if hasattr(user32, "SetProcessDpiAwarenessContext"):
 
 if shcore and hasattr(shcore, "SetProcessDpiAwareness"):
     shcore.SetProcessDpiAwareness.argtypes = [ctypes.c_int]
-    shcore.SetProcessDpiAwareness.restype = wintypes.HRESULT
+    shcore.SetProcessDpiAwareness.restype = getattr(wintypes, "HRESULT", ctypes.HRESULT)
 
 
 def init_dpi_awareness() -> str:

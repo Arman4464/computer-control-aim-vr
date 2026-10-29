@@ -61,7 +61,7 @@ COINIT_MULTITHREADED = 0x0
 COINIT_APARTMENTTHREADED = 0x2
 
 ole32.CoInitializeEx.argtypes = [ctypes.c_void_p, wintypes.DWORD]
-ole32.CoInitializeEx.restype = wintypes.HRESULT
+ole32.CoInitializeEx.restype = getattr(wintypes, "HRESULT", ctypes.HRESULT)
 ole32.CoUninitialize.argtypes = []
 ole32.CoUninitialize.restype = None
 
