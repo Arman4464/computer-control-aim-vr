@@ -61,9 +61,14 @@ user32.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWOR
 user32.OpenInputDesktop.restype = wintypes.HANDLE
 user32.CloseDesktop.argtypes = [wintypes.HANDLE]
 user32.CloseDesktop.restype = wintypes.BOOL
+user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+user32.GetClientRect.restype = wintypes.BOOL
+user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+user32.ClientToScreen.restype = wintypes.BOOL
 
 dwmapi = getattr(ctypes.windll, "dwmapi", None)
-DWMWA_CLOAKED = 9
+DWMWA_EXTENDED_FRAME_BOUNDS = 9
+DWMWA_CLOAKED = 14
 
 gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
 gdi32.CreateCompatibleDC.restype = wintypes.HDC
@@ -436,12 +441,71 @@ def get_foreground_window_info() -> Optional[Dict[str, Any]]:
     }
 
 
-def _capture_window_worker(hwnd: int) -> Image.Image:
+def get_window_extended_bounds(hwnd: int) -> Tuple[int, int, int, int]:
+    """
+    Returns (left, top, width, height) of genuine visible window surface,
+    excluding invisible Windows 10/11 aero drop-shadow resizing margins.
+    Falls back to GetWindowRect if DWM is unavailable.
+    """
+    if not hwnd or not user32.IsWindow(hwnd):
+        return (0, 0, 0, 0)
+
+    rect = wintypes.RECT()
+    if dwmapi:
+        hr = dwmapi.DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            ctypes.byref(rect),
+            ctypes.sizeof(rect)
+        )
+        if hr == 0:
+            w = max(0, rect.right - rect.left)
+            h = max(0, rect.bottom - rect.top)
+            return (int(rect.left), int(rect.top), int(w), int(h))
+
+    user32.GetWindowRect(hwnd, ctypes.byref(rect))
+    w = max(0, rect.right - rect.left)
+    h = max(0, rect.bottom - rect.top)
+    return (int(rect.left), int(rect.top), int(w), int(h))
+
+
+def get_window_client_bounds(hwnd: int) -> Tuple[int, int, int, int]:
+    """
+    Returns (left, top, width, height) in absolute screen coordinates
+    for the client/content area of the window (excluding OS title bar and frames).
+    """
+    if not hwnd or not user32.IsWindow(hwnd):
+        return (0, 0, 0, 0)
+
+    client_rect = wintypes.RECT()
+    user32.GetClientRect(hwnd, ctypes.byref(client_rect))
+    w = max(0, client_rect.right - client_rect.left)
+    h = max(0, client_rect.bottom - client_rect.top)
+
+    pt = wintypes.POINT(0, 0)
+    user32.ClientToScreen(hwnd, ctypes.byref(pt))
+    return (int(pt.x), int(pt.y), int(w), int(h))
+
+
+def window_to_screen_coords(hwnd: int, rx: int, ry: int, client_only: bool = False) -> Tuple[int, int]:
+    """
+    Translates relative window/client coordinates (rx, ry) into absolute desktop screen coordinates.
+    """
+    if client_only:
+        left, top, _, _ = get_window_client_bounds(hwnd)
+    else:
+        left, top, _, _ = get_window_extended_bounds(hwnd)
+    return (left + rx, top + ry)
+
+
+def _capture_window_worker(hwnd: int, client_only: bool = False) -> Image.Image:
     if user32.IsIconic(hwnd):
         user32.ShowWindow(hwnd, SW_RESTORE)
 
     rect = wintypes.RECT()
     user32.GetWindowRect(hwnd, ctypes.byref(rect))
+    full_left = int(rect.left)
+    full_top = int(rect.top)
     width = max(1, rect.right - rect.left)
     height = max(1, rect.bottom - rect.top)
 
@@ -480,6 +544,26 @@ def _capture_window_worker(hwnd: int) -> Image.Image:
             gdi32.GetDIBits(hdc_mem, hbm, 0, height, buffer, ctypes.byref(bmi), 0)
             img = Image.frombuffer("RGBA", (width, height), buffer, "raw", "BGRA", 0, 1).convert("RGB")
 
+        # Smart clipping:
+        if client_only:
+            cl_left, cl_top, cw, ch = get_window_client_bounds(hwnd)
+            if cw > 0 and ch > 0:
+                crop_x = max(0, cl_left - full_left)
+                crop_y = max(0, cl_top - full_top)
+                crop_w = min(width - crop_x, cw)
+                crop_h = min(height - crop_y, ch)
+                if crop_w > 0 and crop_h > 0 and (crop_x > 0 or crop_y > 0 or crop_w < width or crop_h < height):
+                    img = img.crop((crop_x, crop_y, crop_x + crop_w, crop_y + crop_h))
+        else:
+            ext_left, ext_top, ew, eh = get_window_extended_bounds(hwnd)
+            if ew > 0 and eh > 0 and (ew < width or eh < height):
+                crop_x = max(0, ext_left - full_left)
+                crop_y = max(0, ext_top - full_top)
+                crop_w = min(width - crop_x, ew)
+                crop_h = min(height - crop_y, eh)
+                if crop_w > 0 and crop_h > 0 and (crop_x > 0 or crop_y > 0 or crop_w < width or crop_h < height):
+                    img = img.crop((crop_x, crop_y, crop_x + crop_w, crop_y + crop_h))
+
         return img
     finally:
         if hdc_mem and h_old:
@@ -492,13 +576,14 @@ def _capture_window_worker(hwnd: int) -> Image.Image:
             user32.ReleaseDC(0, hdc_screen)
 
 
-def capture_window(hwnd: int) -> Image.Image:
+def capture_window(hwnd: int, client_only: bool = False) -> Image.Image:
     """
     Captures a specific window using PrintWindow (PW_RENDERFULLCONTENT)
     with automatic fallback to BitBlt if PrintWindow returns 0 or black.
+    Strips invisible aero drop-shadows or crops client-only area cleanly.
     Runs inside interactive desktop worker thread to ensure display surface access.
     """
-    return run_in_interactive_desktop(_capture_window_worker, hwnd)
+    return run_in_interactive_desktop(_capture_window_worker, hwnd, client_only)
 
 
 class ScreenCaptureManager:
@@ -511,14 +596,17 @@ class ScreenCaptureManager:
         self.last_frame: Optional[Image.Image] = None
         self.last_target: Optional[str] = None
 
-    def get_raw_frame(self, target: Optional[str] = None) -> Tuple[Image.Image, List[int]]:
+    def get_raw_frame(self, target: Optional[str] = None, client_only: bool = False) -> Tuple[Image.Image, List[int]]:
         """Captures raw unscaled PIL image and returns (image, bounds)."""
         if target:
             win = find_window(target)
             if not win:
                 raise ValueError(f"Window matching '{target}' not found.")
-            img = capture_window(win["hwnd"])
-            target_bounds = win["bounds"]
+            img = capture_window(win["hwnd"], client_only=client_only)
+            if client_only:
+                target_bounds = list(get_window_client_bounds(win["hwnd"]))
+            else:
+                target_bounds = list(get_window_extended_bounds(win["hwnd"]))
         else:
             img = capture_screen()
             vx, vy, vw, vh = get_virtual_screen_bounds()
@@ -532,7 +620,8 @@ class ScreenCaptureManager:
         target: Optional[str] = None,
         mode: str = "full",
         max_dim: int = 1024,
-        quality: int = 75
+        quality: int = 75,
+        client_only: bool = False,
     ) -> Dict[str, Any]:
         """
         Captures screen or target window.
@@ -546,8 +635,11 @@ class ScreenCaptureManager:
             win = find_window(target)
             if not win:
                 raise ValueError(f"Window matching '{target}' not found.")
-            img = capture_window(win["hwnd"])
-            target_bounds = win["bounds"]
+            img = capture_window(win["hwnd"], client_only=client_only)
+            if client_only:
+                target_bounds = list(get_window_client_bounds(win["hwnd"]))
+            else:
+                target_bounds = list(get_window_extended_bounds(win["hwnd"]))
         else:
             img = capture_screen()
             vx, vy, vw, vh = get_virtual_screen_bounds()

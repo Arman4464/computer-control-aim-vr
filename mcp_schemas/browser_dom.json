@@ -1,0 +1,33 @@
+{
+  "name": "browser_dom_action",
+  "description": "Direct companion browser extension bridge for Chrome and Edge. Executes DOM queries, clicks, form filling, and DOM inspection in <5ms without requiring browser restarts or --remote-debugging-port.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["click", "type", "query", "get_dom_tree", "scroll", "eval"],
+        "description": "DOM action to perform."
+      },
+      "selector": {
+        "type": "string",
+        "description": "CSS selector or XPath of target DOM element."
+      },
+      "text": {
+        "type": "string",
+        "description": "Text to type into input, or text query to match element."
+      },
+      "value": {
+        "type": "string",
+        "description": "Value to set for input."
+      },
+      "timeout": {
+        "type": "number",
+        "default": 10.0,
+        "description": "Timeout in seconds."
+      }
+    },
+    "required": ["action"],
+    "additionalProperties": false
+  }
+}

@@ -772,11 +772,12 @@ TOOLS_DEFINITIONS = [
                                 "description": "Verification strategy: 'auto' (servoing for clicks/keys), 'visual' (strict ImageChops delta/window check), 'none'."
                             },
                             "retries": {"type": "integer", "default": 0, "description": "Number of retries if step or verification fails."},
+                            "pre_condition": {"type": "object", "description": "Optional condition to check before step execution (e.g. element_exists, text_exists, window_exists, equals)."},
+                            "post_condition": {"type": "object", "description": "Optional condition to verify after step execution."},
+                            "on_success": {"type": "string", "description": "Optional target step ID to jump to upon success (overrides default order)."},
+                            "on_condition_failed": {"type": "string", "description": "Target step ID or 'abort'/'continue' if pre-condition is not met."},
                             "on_failure": {
-                                "type": "string",
-                                "enum": ["abort", "continue"],
-                                "default": "abort",
-                                "description": "'abort' stops execution and captures reflection snapshot; 'continue' logs error and proceeds."
+                                "description": "Error recovery strategy: 'abort', 'continue', step ID to branch to, or {strategy: 'branch', target_step: 'id'}."
                             }
                         },
                         "required": ["action"]
@@ -788,6 +789,62 @@ TOOLS_DEFINITIONS = [
             "required": ["steps"],
             "additionalProperties": False,
         },
+    },
+    {
+        "name": "take_som_screenshot",
+        "description": "Captures the screen or specified window, executes multi-source element detection (UIA + WinRT OCR + CV contours), deduplicates candidates, renders high-contrast numbered badges ([1], [2], [3]...) over the image, and builds the active interactive element catalog. Eliminates coordinate guessing.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target": {"type": "string", "description": "Optional window title substring to capture."},
+                "client_only": {"type": "boolean", "default": false, "description": "Whether to crop only the client/content area, excluding window frames and OS title bar."},
+                "max_elements": {"type": "integer", "default": 100, "description": "Maximum number of elements to annotate."}
+            },
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "click_som_mark",
+        "description": "Clicks an indexed UI element corresponding to badge mark number [1], [2], [3]... previously produced by take_som_screenshot. Guarantees 100% precision motor action.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "mark_id": {"type": "integer", "description": "The mark number to click (e.g. 1, 2, 14)."},
+                "button": {"type": "string", "enum": ["left", "right", "middle"], "default": "left", "description": "Mouse button to click."},
+                "clicks": {"type": "integer", "default": 1, "description": "Number of clicks (1 for single, 2 for double, 3 for triple)."}
+            },
+            "required": ["mark_id"],
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "browser_dom_action",
+        "description": "Direct companion browser extension bridge for Chrome and Edge. Executes DOM queries, clicks, form filling, and DOM inspection in <5ms without requiring browser restarts or --remote-debugging-port.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["click", "type", "query", "get_dom_tree", "scroll", "eval"],
+                    "description": "DOM action to perform."
+                },
+                "selector": {"type": "string", "description": "CSS selector or XPath of target DOM element."},
+                "text": {"type": "string", "description": "Text to type into input, or text query to match element."},
+                "value": {"type": "string", "description": "Value to set for input."},
+                "timeout": {"type": "number", "default": 10.0, "description": "Timeout in seconds."}
+            },
+            "required": ["action"],
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "browser_bridge_status",
+        "description": "Checks the health of the companion browser extension loopback bridge and returns active tab metadata.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        }
     },
     {
         "name": "record_screen",
@@ -1577,6 +1634,65 @@ class MCPServer:
                 return [{"type": "text", "text": "Error: Either 'query' or both 'x' and 'y' must be provided to hover."}], True
             cx, cy = default_mouse.hover(hx, hy, duration=duration, coords_mode=coords_mode)
             return [{"type": "text", "text": f"Hovered at ({cx}, {cy}) for {duration}s."}], False
+
+        elif name == "take_som_screenshot":
+            target = args.get("target")
+            client_only = bool(args.get("client_only", False))
+            max_elem = int(args.get("max_elements", 100))
+            from perception.som_engine import default_som as som_engine
+            res = som_engine.generate_som(target_window=target, client_only=client_only, max_elements=max_elem)
+            if res.get("status") == "error":
+                return [{"type": "text", "text": json.dumps(res, indent=2)}], True
+            img = res["annotated_image"]
+            b64 = default_capture_manager.encode_image(img, quality=85)
+            meta = {
+                "status": "success",
+                "target": res.get("target"),
+                "elements_count": res.get("elements_count", 0),
+                "elapsed_ms": res.get("elapsed_ms", 0),
+                "catalog": res.get("catalog", {}),
+            }
+            content = [
+                {"type": "text", "text": json.dumps(meta, indent=2)},
+                {"type": "image", "data": b64, "mimeType": "image/jpeg"},
+            ]
+            return content, False
+
+        elif name == "click_som_mark":
+            mark_id = int(args["mark_id"])
+            btn = args.get("button", "left")
+            clicks = int(args.get("clicks", 1))
+            from perception.som_engine import default_som as som_engine
+            coords = som_engine.resolve_mark(mark_id)
+            if not coords:
+                return [{"type": "text", "text": f"Error: SoM mark [{mark_id}] not found in active catalog. Run take_som_screenshot first."}], True
+            cx, cy = default_mouse.click(x=coords[0], y=coords[1], button=btn, clicks=clicks)
+            res = {
+                "status": "success",
+                "mark_id": mark_id,
+                "clicked_x": cx,
+                "clicked_y": cy,
+                "button": btn,
+                "clicks": clicks,
+            }
+            return [{"type": "text", "text": json.dumps(res, indent=2)}], False
+
+        elif name == "browser_dom_action":
+            from control.browser_bridge import default_browser_bridge
+            act = args["action"]
+            timeout = float(args.get("timeout", 10.0))
+            res = default_browser_bridge.dispatch_command(act, args, timeout=timeout)
+            is_err = res.get("status") in ["error", "timeout"]
+            return [{"type": "text", "text": json.dumps(res, indent=2)}], is_err
+
+        elif name == "browser_bridge_status":
+            from control.browser_bridge import default_browser_bridge
+            res = {
+                "running": default_browser_bridge.is_running(),
+                "connected": default_browser_bridge.is_connected(),
+                "active_tab": default_browser_bridge.active_tab_info,
+            }
+            return [{"type": "text", "text": json.dumps(res, indent=2)}], False
 
         elif name == "execute_action_dag":
             steps = args.get("steps", [])

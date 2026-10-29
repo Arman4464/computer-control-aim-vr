@@ -1,0 +1,24 @@
+{
+  "name": "take_som_screenshot",
+  "description": "Captures the screen or specified window, executes multi-source element detection (UIA + WinRT OCR + CV contours), deduplicates candidates, renders high-contrast numbered badges ([1], [2], [3]...) over the image, and builds the active interactive element catalog. Eliminates coordinate guessing.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "target": {
+        "type": "string",
+        "description": "Optional window title substring to capture."
+      },
+      "client_only": {
+        "type": "boolean",
+        "default": false,
+        "description": "Whether to crop only the client/content area, excluding window frames and OS title bar."
+      },
+      "max_elements": {
+        "type": "integer",
+        "default": 100,
+        "description": "Maximum number of elements to annotate."
+      }
+    },
+    "additionalProperties": false
+  }
+}

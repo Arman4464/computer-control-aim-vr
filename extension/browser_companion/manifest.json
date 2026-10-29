@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "AIM-VR Browser Companion",
+  "version": "1.0.0",
+  "description": "Zero-latency companion bridge for AIM-VR computer control on Chrome and Edge.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "icons": {
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}

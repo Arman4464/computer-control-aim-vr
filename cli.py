@@ -207,6 +207,26 @@ def main():
     waitfor_parser.add_argument("--timeout", type=float, default=10.0, help="Timeout in seconds")
     waitfor_parser.add_argument("--interval", type=float, default=0.25, help="Interval between evaluation attempts")
 
+    # 21. som: Set-of-Mark annotated screenshot
+    som_parser = subparsers.add_parser("som", help="Capture Set-of-Mark annotated screenshot")
+    som_parser.add_argument("--target", help="Target window substring")
+    som_parser.add_argument("--client-only", action="store_true", help="Crop client area only")
+    som_parser.add_argument("--output", help="Optional file path to save annotated image (e.g. som.jpg)")
+
+    # 22. clickmark: Click numbered mark
+    clickmark_parser = subparsers.add_parser("clickmark", help="Click an indexed SoM badge mark")
+    clickmark_parser.add_argument("mark_id", type=int, help="Mark number to click (e.g. 1, 2, 14)")
+    clickmark_parser.add_argument("--button", default="left", choices=["left", "right", "middle"], help="Mouse button")
+    clickmark_parser.add_argument("--clicks", type=int, default=1, help="Click count")
+
+    # 23. browser: Companion browser extension DOM action
+    browser_parser = subparsers.add_parser("browser", help="Companion browser extension DOM action")
+    browser_parser.add_argument("action", choices=["click", "type", "query", "get_dom_tree", "scroll", "eval", "status"], help="DOM action")
+    browser_parser.add_argument("--selector", help="CSS selector or XPath")
+    browser_parser.add_argument("--text", help="Text to type or query")
+    browser_parser.add_argument("--value", help="Value to set")
+    browser_parser.add_argument("--timeout", type=float, default=10.0, help="Timeout in seconds")
+
     args = parser.parse_args()
 
     # Disable corner failsafe by default during CLI execution to avoid false-positives on parked cursor
@@ -521,6 +541,45 @@ def main():
                 "interval": args.interval,
             }
         )
+        print(res[0]["text"])
+        sys.exit(1 if is_err else 0)
+
+    elif args.command == "som":
+        res, is_err = server.execute_tool(
+            "take_som_screenshot",
+            {"target": args.target, "client_only": args.client_only}
+        )
+        for block in res:
+            if block.get("type") == "text":
+                print(block["text"])
+            elif block.get("type") == "image" and args.output:
+                import base64
+                img_bytes = base64.b64decode(block["data"])
+                with open(args.output, "wb") as f_out:
+                    f_out.write(img_bytes)
+                print(f"Saved annotated SoM image to: {args.output}")
+        sys.exit(1 if is_err else 0)
+
+    elif args.command == "clickmark":
+        res, is_err = server.execute_tool(
+            "click_som_mark",
+            {"mark_id": args.mark_id, "button": args.button, "clicks": args.clicks}
+        )
+        print(res[0]["text"])
+        sys.exit(1 if is_err else 0)
+
+    elif args.command == "browser":
+        if args.action == "status":
+            res, is_err = server.execute_tool("browser_bridge_status", {})
+        else:
+            params = {
+                "action": args.action,
+                "selector": args.selector,
+                "text": args.text,
+                "value": args.value,
+                "timeout": args.timeout,
+            }
+            res, is_err = server.execute_tool("browser_dom_action", params)
         print(res[0]["text"])
         sys.exit(1 if is_err else 0)
 

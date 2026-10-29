@@ -285,12 +285,22 @@ class MouseEngine:
         y: float | None = None,
         button: str = "left",
         clicks: int = 1,
-        coords_mode: str = "pixel"
+        coords_mode: str = "pixel",
+        mark_id: int | None = None
     ) -> tuple[int, int]:
         """
-        Clicks at target (x, y) or current position.
+        Clicks at target (x, y), mark_id, or current position.
         Supports single, double, or triple clicks (e.g. for full paragraph/URL selection).
         """
+        if mark_id is not None:
+            from perception.som_engine import default_som
+            coords = default_som.resolve_mark(mark_id)
+            if coords:
+                x, y = coords
+                coords_mode = "pixel"
+            else:
+                raise ValueError(f"SoM mark [{mark_id}] not found in active catalog. Run take_som_screenshot first.")
+
         self.governor.pre_action()
 
         if x is not None and y is not None:

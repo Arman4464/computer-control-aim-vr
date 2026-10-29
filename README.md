@@ -91,7 +91,7 @@ Every agent or operator using AIM-VR 3.0 must adhere to five non-negotiable rule
 
 ## Model Context Protocol (MCP) Tools Reference
 
-AIM-VR 3.0 exposes 29 specialized MCP tools adhering to protocol version `2024-11-05`:
+AIM-VR 3.0 exposes 33 specialized MCP tools adhering to protocol version `2024-11-05`:
 
 ### 1. High-Speed COM & Browser Connectors
 | Tool | Arguments | Purpose |
@@ -145,6 +145,10 @@ AIM-VR 3.0 exposes 29 specialized MCP tools adhering to protocol version `2024-1
 | `notify` | `title`, `message`, `app_id`, `sound` | Sends native Windows Action Center toast notifications with optional sound. |
 | `registry` | `mode`, `path`, `name`, `value`, `val_type`, `view64` | High-speed native Windows Registry manager (`get`, `set`, `delete_value`, `delete_key`, `list`). |
 | `wait_for` | `condition`, `target`, `query`, `timeout`, `interval` | In-engine polling for UI conditions (`text_exists`, `window_exists`, `window_active`, `element_exists`) to eliminate LLM polling loops. |
+| `take_som_screenshot` | `target`, `client_only`, `max_elements` | Captures window/screen, extracts elements via UIA + WinRT OCR + contours, and renders numbered badges (`[1]`, `[2]`, `[3]`). |
+| `click_som_mark` | `mark_id`, `button`, `clicks` | Clicks an indexed SoM element mark with 100% precision, eliminating coordinate guessing. |
+| `browser_dom_action` | `action`, `selector`, `text`, `value`, `timeout` | Sub-5ms DOM queries, clicks, form filling, and DOM inspection via zero-flag companion extension. |
+| `browser_bridge_status` | None | Checks the health of the companion browser extension loopback bridge and active tab info. |
 
 ---
 

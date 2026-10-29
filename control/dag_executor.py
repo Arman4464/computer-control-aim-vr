@@ -226,6 +226,92 @@ class DAGExecutor:
             ),
         }
 
+    def evaluate_condition(self, condition: Any, context: Dict[str, Any]) -> Tuple[bool, str]:
+        """
+        Evaluates pre-conditions, post-conditions, and branching logic.
+        Supported types: 'equals', 'contains', 'not_equals', 'element_exists',
+        'window_exists', 'window_active', 'text_exists', 'browser_query'.
+        """
+        if not condition:
+            return True, "No condition specified"
+
+        if isinstance(condition, bool):
+            return condition, f"Literal boolean: {condition}"
+
+        if not isinstance(condition, dict):
+            return bool(condition), f"Truthiness check on {type(condition)}"
+
+        cond_type = (condition.get("type") or "equals").lower().strip()
+
+        # Variable equality & matching
+        if cond_type == "equals":
+            left = resolve_templates(condition.get("left"), context)
+            right = resolve_templates(condition.get("right"), context)
+            satisfied = str(left).strip() == str(right).strip()
+            return satisfied, f"equals('{left}', '{right}') -> {satisfied}"
+
+        elif cond_type == "not_equals":
+            left = resolve_templates(condition.get("left"), context)
+            right = resolve_templates(condition.get("right"), context)
+            satisfied = str(left).strip() != str(right).strip()
+            return satisfied, f"not_equals('{left}', '{right}') -> {satisfied}"
+
+        elif cond_type == "contains":
+            left = resolve_templates(condition.get("left"), context)
+            right = resolve_templates(condition.get("right"), context)
+            satisfied = str(right).lower() in str(left).lower()
+            return satisfied, f"contains('{left}', '{right}') -> {satisfied}"
+
+        # Native Desktop UI Conditions
+        elif cond_type == "window_exists":
+            from perception.screen_capture import find_window
+            target = resolve_templates(condition.get("target"), context)
+            win = find_window(str(target)) if target else None
+            satisfied = win is not None
+            return satisfied, f"window_exists('{target}') -> {satisfied}"
+
+        elif cond_type == "window_active":
+            from perception.screen_capture import get_foreground_window_info
+            target = resolve_templates(condition.get("target"), context)
+            fg = get_foreground_window_info()
+            satisfied = bool(fg and str(target).lower() in (fg.get("title") or "").lower())
+            return satisfied, f"window_active('{target}') -> {satisfied}"
+
+        elif cond_type == "element_exists":
+            from perception.element_locator import default_locator
+            query = resolve_templates(condition.get("query"), context)
+            target = resolve_templates(condition.get("target"), context)
+            elem = default_locator.locate(str(query), target_window=str(target) if target else None)
+            satisfied = elem is not None
+            return satisfied, f"element_exists('{query}') -> {satisfied}"
+
+        elif cond_type == "text_exists":
+            from perception.screen_capture import find_window, capture_window, capture_screen
+            from perception.winrt_ocr import default_ocr
+            query = resolve_templates(condition.get("query"), context)
+            target = resolve_templates(condition.get("target"), context)
+            img = None
+            if target:
+                win = find_window(str(target))
+                if win:
+                    img = capture_window(win["hwnd"])
+            if img is None:
+                img = capture_screen()
+            match = default_ocr.find_text(img, str(query)) if (img and query) else None
+            satisfied = match is not None
+            return satisfied, f"text_exists('{query}') -> {satisfied}"
+
+        # Browser DOM Extension Condition
+        elif cond_type == "browser_query":
+            from control.browser_bridge import default_browser_bridge
+            selector = resolve_templates(condition.get("selector"), context)
+            text_m = resolve_templates(condition.get("text"), context)
+            res = default_browser_bridge.dispatch_command("query", {"selector": selector, "text": text_m})
+            satisfied = res.get("status") == "found"
+            return satisfied, f"browser_query('{selector}') -> {satisfied}"
+
+        return True, f"Unknown condition type '{cond_type}', passed by default"
+
     def execute_step(
         self,
         step: Dict[str, Any],
@@ -250,6 +336,30 @@ class DAGExecutor:
 
         # Interpolate variables from prior step outputs
         args = resolve_templates(merged_args, context)
+
+        # Pre-condition evaluation
+        pre_cond = step.get("pre_condition") or step.get("condition")
+        if pre_cond:
+            satisfied, reason = self.evaluate_condition(pre_cond, context)
+            if not satisfied:
+                return {
+                    "status": "condition_not_met",
+                    "step_id": step_id,
+                    "action": action,
+                    "reason": reason,
+                    "skipped": True,
+                    "result": None,
+                }
+
+        # Auto-resolve SoM mark_id if present
+        if "mark_id" in args and args["mark_id"] is not None:
+            from perception.som_engine import default_som
+            coords = default_som.resolve_mark(args["mark_id"])
+            if coords:
+                args["x"], args["y"] = coords
+                args["coords_mode"] = "pixel"
+            else:
+                raise ValueError(f"SoM mark [{args['mark_id']}] not found in active catalog. Run take_som_screenshot first.")
 
         # Safety checks
         self.governor.check_failsafe()
@@ -304,6 +414,18 @@ class DAGExecutor:
 
                 elapsed_ms = round((time.time() - t0) * 1000, 2)
 
+                # Post-condition verification
+                post_cond = step.get("post_condition")
+                if post_cond:
+                    temp_ctx = dict(context)
+                    temp_ctx[step_id] = {"result": parsed_data}
+                    p_sat, p_reason = self.evaluate_condition(post_cond, temp_ctx)
+                    if not p_sat:
+                        if attempt < retries:
+                            time.sleep(retry_delay)
+                            continue
+                        raise RuntimeError(f"Post-condition failed for step '{step_id}': {p_reason}")
+
                 # Micro-servoing closed loop verification
                 reaction = None
                 verified = True
@@ -341,7 +463,73 @@ class DAGExecutor:
         ensure_interactive_desktop()
         from perception.screen_capture import find_window, focus_window
 
-        if action in ["click", "double_click", "right_click", "triple_click"]:
+        if action in ["take_som_screenshot", "som"]:
+            from perception.som_engine import default_som
+            return default_som.generate_som(
+                target_window=args.get("target"),
+                client_only=bool(args.get("client_only", False)),
+                max_elements=int(args.get("max_elements", 100))
+            )
+
+        elif action in ["click_som_mark", "clickmark"]:
+            from perception.som_engine import default_som
+            coords = default_som.resolve_mark(int(args["mark_id"]))
+            if not coords:
+                raise ValueError(f"SoM mark [{args['mark_id']}] not found in active catalog.")
+            cx, cy = default_mouse.click(x=coords[0], y=coords[1], button=args.get("button", "left"))
+            return {"status": "success", "mark_id": args["mark_id"], "clicked_x": cx, "clicked_y": cy}
+
+        elif action in ["browser_dom_action", "browser_dom", "browser"]:
+            from control.browser_bridge import default_browser_bridge
+            return default_browser_bridge.dispatch_command(
+                action=args.get("dom_action", args.get("action", "click")),
+                params=args.get("params") or args,
+                timeout=float(args.get("timeout", 10.0))
+            )
+
+        elif action == "browser_bridge_status":
+            from control.browser_bridge import default_browser_bridge
+            return {
+                "running": default_browser_bridge.is_running(),
+                "connected": default_browser_bridge.is_connected(),
+                "active_tab": default_browser_bridge.active_tab_info
+            }
+
+        elif action == "notify":
+            from control.notifications import send_toast_notification
+            return send_toast_notification(
+                title=args.get("title", ""),
+                message=args.get("message", ""),
+                app_id=args.get("app_id"),
+                sound=bool(args.get("sound", True))
+            )
+
+        elif action == "registry":
+            from control.registry import default_registry
+            reg_op = args.get("operation") or args.get("action", "get")
+            if reg_op == "get":
+                return default_registry.get_value(args["path"], args.get("name", ""), view64=bool(args.get("view64", True)))
+            elif reg_op == "set":
+                return default_registry.set_value(args["path"], args["name"], args["value"], val_type=args.get("type", "string"), view64=bool(args.get("view64", True)))
+            elif reg_op == "list":
+                return default_registry.list_key(args["path"], view64=bool(args.get("view64", True)))
+            elif reg_op == "delete_value":
+                return default_registry.delete_value(args["path"], args["name"], view64=bool(args.get("view64", True)))
+            elif reg_op == "delete_key":
+                return default_registry.delete_key(args["path"], view64=bool(args.get("view64", True)))
+            raise ValueError(f"Unknown registry operation '{reg_op}'")
+
+        elif action == "wait_for":
+            from control.wait_for import wait_for_condition
+            return wait_for_condition(
+                condition=args["condition"],
+                target=args.get("target"),
+                query=args.get("query"),
+                timeout=float(args.get("timeout", 10.0)),
+                interval=float(args.get("interval", 0.25))
+            )
+
+        elif action in ["click", "double_click", "right_click", "triple_click"]:
             x = args.get("x")
             y = args.get("y")
             target = args.get("target")
@@ -487,22 +675,31 @@ class DAGExecutor:
         steps: List[Dict[str, Any]],
         stop_on_error: bool = True,
         auto_verify: bool = True,
+        max_iterations: int = 100,
     ) -> Dict[str, Any]:
         """
-        Compiles and executes the Action DAG end-to-end.
+        Compiles and executes the Action DAG end-to-end with conditional branching.
         Accumulates execution trace, interpolates dynamic outputs,
         and provides adaptive reflection upon failure.
         """
         start_total = time.time()
         compiled_steps = self.compile(steps)
+        step_map = {s["id"]: s for s in compiled_steps}
+        order = [s["id"] for s in compiled_steps]
 
         context: Dict[str, Any] = {
             "steps": {},
         }
         trace: List[Dict[str, Any]] = []
 
-        for idx, step in enumerate(compiled_steps, 1):
-            step_id = step["id"]
+        curr_idx = 0
+        iterations = 0
+
+        while curr_idx < len(order) and iterations < max_iterations:
+            iterations += 1
+            step_id = order[curr_idx]
+            step = step_map[step_id]
+
             step_on_failure = step.get("on_failure", "abort" if stop_on_error else "continue")
 
             try:
@@ -510,6 +707,38 @@ class DAGExecutor:
                 trace.append(record)
                 context["steps"][step_id] = record
                 context[step_id] = record
+
+                # Handle condition not met
+                if record.get("status") == "condition_not_met":
+                    on_cond_fail = step.get("on_condition_failed") or step.get("if_false")
+                    if on_cond_fail and on_cond_fail in step_map:
+                        curr_idx = order.index(on_cond_fail) if on_cond_fail in order else curr_idx + 1
+                        continue
+                    elif on_cond_fail == "abort":
+                        reflection = self.capture_reflection_snapshot(step_id, f"Condition failed: {record.get('reason')}")
+                        return {
+                            "status": "partial_failure",
+                            "total_steps": len(compiled_steps),
+                            "completed_steps": len(trace) - 1,
+                            "failed_step_id": step_id,
+                            "error": f"Condition failed: {record.get('reason')}",
+                            "total_time_ms": round((time.time() - start_total) * 1000, 2),
+                            "reflection": reflection,
+                            "trace": trace,
+                        }
+                    curr_idx += 1
+                    continue
+
+                # Step succeeded: check on_success branching
+                next_step = step.get("on_success") or step.get("if_true")
+                if next_step and next_step in step_map:
+                    if next_step in order:
+                        curr_idx = order.index(next_step)
+                    else:
+                        curr_idx += 1
+                else:
+                    curr_idx += 1
+
             except Exception as exc:
                 err_msg = str(exc)
                 failed_record = {
@@ -523,24 +752,37 @@ class DAGExecutor:
                 context["steps"][step_id] = failed_record
                 context[step_id] = failed_record
 
+                # Check branching on failure
+                branch_target = None
+                if isinstance(step_on_failure, dict):
+                    if step_on_failure.get("strategy") == "branch":
+                        branch_target = step_on_failure.get("target_step")
+                elif isinstance(step_on_failure, str) and step_on_failure in step_map:
+                    branch_target = step_on_failure
+
+                if branch_target and branch_target in step_map:
+                    curr_idx = order.index(branch_target) if branch_target in order else curr_idx + 1
+                    continue
+
                 if step_on_failure == "abort":
-                    # Capture adaptive diagnostic reflection
                     reflection = self.capture_reflection_snapshot(step_id, err_msg)
                     return {
                         "status": "partial_failure",
                         "total_steps": len(compiled_steps),
-                        "completed_steps": idx - 1,
+                        "completed_steps": len(trace) - 1,
                         "failed_step_id": step_id,
                         "error": err_msg,
                         "total_time_ms": round((time.time() - start_total) * 1000, 2),
                         "reflection": reflection,
                         "trace": trace,
                     }
+                else:
+                    curr_idx += 1
 
         return {
             "status": "success",
             "total_steps": len(compiled_steps),
-            "completed_steps": len(compiled_steps),
+            "executed_steps": len(trace),
             "total_time_ms": round((time.time() - start_total) * 1000, 2),
             "trace": trace,
         }
