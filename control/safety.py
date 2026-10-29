@@ -123,10 +123,18 @@ def ensure_interactive_desktop() -> bool:
             if h_cur != h_input:
                 res = user32.SetThreadDesktop(h_input)
                 if res:
+                    if _desktop_handle and _desktop_handle != h_input:
+                        try:
+                            user32.CloseDesktop(_desktop_handle)
+                        except Exception:
+                            pass
                     _desktop_handle = h_input
                     return True
-                # If thread already has open UI windows/hooks, it retains its existing valid desktop
+                # Failed to attach: close desktop handle to prevent kernel handle leak
+                user32.CloseDesktop(h_input)
                 return bool(h_cur)
+            # Already attached to input desktop: close redundant handle
+            user32.CloseDesktop(h_input)
             return True
         return bool(h_cur)
     except Exception as e:
@@ -249,7 +257,9 @@ class SafetyGovernor:
             time.sleep(self.contention_cooldown_s)
             # Update last known pos to current user pos
             self.last_agent_pos = get_physical_cursor_pos()
-            return True
+            raise UserContentionException(
+                f"User physical mouse contention detected (delta={dist:.1f}px). Operation aborted to yield to human user."
+            )
 
         return False
 

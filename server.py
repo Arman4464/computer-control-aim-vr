@@ -797,10 +797,10 @@ TOOLS_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "target": {"type": "string", "description": "Optional window title substring to capture."},
-                "client_only": {"type": "boolean", "default": false, "description": "Whether to crop only the client/content area, excluding window frames and OS title bar."},
+                "client_only": {"type": "boolean", "default": False, "description": "Whether to crop only the client/content area, excluding window frames and OS title bar."},
                 "max_elements": {"type": "integer", "default": 100, "description": "Maximum number of elements to annotate."}
             },
-            "additionalProperties": false
+            "additionalProperties": False
         }
     },
     {
@@ -814,7 +814,7 @@ TOOLS_DEFINITIONS = [
                 "clicks": {"type": "integer", "default": 1, "description": "Number of clicks (1 for single, 2 for double, 3 for triple)."}
             },
             "required": ["mark_id"],
-            "additionalProperties": false
+            "additionalProperties": False
         }
     },
     {
@@ -834,7 +834,7 @@ TOOLS_DEFINITIONS = [
                 "timeout": {"type": "number", "default": 10.0, "description": "Timeout in seconds."}
             },
             "required": ["action"],
-            "additionalProperties": false
+            "additionalProperties": False
         }
     },
     {
@@ -843,7 +843,7 @@ TOOLS_DEFINITIONS = [
         "inputSchema": {
             "type": "object",
             "properties": {},
-            "additionalProperties": false
+            "additionalProperties": False
         }
     },
     {
@@ -951,6 +951,37 @@ TOOLS_DEFINITIONS = [
         }
     },
 ]
+
+SCHEMAS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_schemas")
+
+
+def load_tool_definitions() -> List[Dict[str, Any]]:
+    """
+    Dynamically loads all MCP tool definitions from mcp_schemas/*.json files.
+    Strictly conforms to MCP 2024-11-05 with 'name', 'description', and 'inputSchema'.
+    Falls back to built-in TOOLS_DEFINITIONS if mcp_schemas directory is unavailable.
+    """
+    if os.path.exists(SCHEMAS_DIR):
+        loaded_tools = []
+        for fn in sorted(os.listdir(SCHEMAS_DIR)):
+            if fn.endswith(".json"):
+                fpath = os.path.join(SCHEMAS_DIR, fn)
+                try:
+                    with open(fpath, "r", encoding="utf-8") as fp:
+                        schema = json.load(fp)
+                    if "parameters" in schema and "inputSchema" not in schema:
+                        schema["inputSchema"] = schema.pop("parameters")
+                    if "name" in schema and "inputSchema" in schema:
+                        loaded_tools.append(schema)
+                except Exception as exc:
+                    sys.stderr.write(f"[MCP] Error loading schema {fn}: {exc}\n")
+        if loaded_tools:
+            return loaded_tools
+    return TOOLS_DEFINITIONS
+
+
+# Dynamically populate active tool definitions conforming strictly to MCP 2024-11-05
+TOOLS_DEFINITIONS = load_tool_definitions()
 
 
 class MCPServer:
@@ -2006,6 +2037,79 @@ class MCPServer:
             res = wait_for_condition(condition=cond, target=w_target, query=w_query, timeout=w_timeout, interval=w_interval)
             is_err = res.get("status") in ("error", "timeout")
             return [{"type": "text", "text": json.dumps(res, indent=2)}], is_err
+
+        elif name == "macro_record":
+            from control.macro_engine import default_macro_engine
+            act = args.get("action", "status")
+            if act == "start":
+                m_name = args.get("name")
+                if not m_name:
+                    return [{"type": "text", "text": "Error: 'name' parameter is required to start recording."}], True
+                res = default_macro_engine.start_recording(
+                    name=m_name,
+                    target_window=args.get("target"),
+                    capture_trajectories=bool(args.get("capture_trajectories", True)),
+                )
+            elif act == "stop":
+                res = default_macro_engine.stop_recording(save=True)
+            elif act == "cancel":
+                res = default_macro_engine.stop_recording(save=False)
+                res["status"] = "cancelled"
+            elif act == "status":
+                res = {
+                    "is_recording": default_macro_engine.is_recording,
+                    "active_macro": default_macro_engine._record_session.get("name") if default_macro_engine.is_recording else None,
+                    "steps_count": len(default_macro_engine._record_session.get("steps", [])) if default_macro_engine.is_recording else 0,
+                }
+            else:
+                return [{"type": "text", "text": f"Unknown macro_record action: '{act}'"}], True
+            return [{"type": "text", "text": json.dumps(res, indent=2)}], False
+
+        elif name == "macro_play":
+            from control.macro_engine import default_macro_engine
+            m_name = args.get("name")
+            if not m_name:
+                return [{"type": "text", "text": "Error: 'name' parameter is required for macro_play."}], True
+            res = default_macro_engine.play_macro(
+                name_or_data=m_name,
+                speed_multiplier=float(args.get("speed_multiplier", 1.0)),
+                dry_run=bool(args.get("dry_run", False)),
+                self_heal=bool(args.get("self_heal", True)),
+            )
+            is_err = res.get("status") == "error"
+            return [{"type": "text", "text": json.dumps(res, indent=2)}], is_err
+
+        elif name == "macro_manage":
+            from control.macro_engine import default_macro_engine
+            act = args.get("action", "list")
+            if act == "list":
+                res = default_macro_engine.list_macros()
+            elif act == "get":
+                m_name = args.get("name", "")
+                res = default_macro_engine.get_macro(m_name)
+                if res is None:
+                    return [{"type": "text", "text": f"Macro '{m_name}' not found."}], True
+            elif act == "delete":
+                m_name = args.get("name", "")
+                ok = default_macro_engine.delete_macro(m_name)
+                res = {"status": "deleted" if ok else "not_found", "name": m_name}
+            elif act == "export":
+                m_name = args.get("name", "")
+                res = default_macro_engine.get_macro(m_name)
+                if res is None:
+                    return [{"type": "text", "text": f"Macro '{m_name}' not found."}], True
+            elif act == "import":
+                m_data = args.get("macro_data")
+                if not m_data or not isinstance(m_data, dict) or "name" not in m_data:
+                    return [{"type": "text", "text": "Error: 'macro_data' object with 'name' and 'steps' required for import."}], True
+                m_name = m_data["name"]
+                fpath = os.path.join(default_macro_engine.macros_dir, f"{m_name}.json")
+                with open(fpath, "w", encoding="utf-8") as fp:
+                    json.dump(m_data, fp, indent=2)
+                res = {"status": "imported", "name": m_name, "file_path": fpath}
+            else:
+                return [{"type": "text", "text": f"Unknown macro_manage action: '{act}'"}], True
+            return [{"type": "text", "text": json.dumps(res, indent=2)}], False
 
         else:
             return [{"type": "text", "text": f"Unknown tool: '{name}'"}], True

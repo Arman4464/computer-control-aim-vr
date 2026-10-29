@@ -1,1 +1,20 @@
-{"name":"hotkey","description":"Executes a key combination shortcut using hardware scan codes (e.g. ['ctrl', 's'], ['win', 'r'], ['alt', 'tab'], ['ctrl', 'shift', 'p']).","parameters":{"additionalProperties":false,"properties":{"keys":{"description":"List of key names to press simultaneously.","items":{"type":"string"},"type":"array"}},"required":["keys"],"type":"object"}}
+{
+  "name": "hotkey",
+  "description": "Executes a key combination shortcut using hardware scan codes (e.g. ['ctrl', 's'], ['win', 'r'], ['alt', 'tab'], ['ctrl', 'shift', 'p']).",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "keys": {
+        "description": "List of key names to press simultaneously.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "keys"
+    ],
+    "type": "object"
+  }
+}

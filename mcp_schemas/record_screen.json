@@ -1,12 +1,18 @@
 {
   "name": "record_screen",
   "description": "Continuous high-speed screen recorder. Captures smooth desktop or window streams and compiles them into animated WebP or GIF videos with optional physical mouse cursor stamping.",
-  "parameters": {
+  "inputSchema": {
     "type": "object",
     "properties": {
       "action": {
         "type": "string",
-        "enum": ["start", "stop", "status", "pause", "resume"],
+        "enum": [
+          "start",
+          "stop",
+          "status",
+          "pause",
+          "resume"
+        ],
         "description": "Recorder action: 'start' initiates recording, 'stop' compiles and saves video file, 'status' reports telemetry, 'pause'/'resume' controls loop."
       },
       "output_path": {
@@ -24,7 +30,9 @@
       },
       "crop_region": {
         "type": "array",
-        "items": {"type": "integer"},
+        "items": {
+          "type": "integer"
+        },
         "description": "Optional [x, y, w, h] pixel bounding box to record a specific region of interest."
       },
       "max_dim": {
@@ -44,7 +52,10 @@
       },
       "format": {
         "type": "string",
-        "enum": ["webp", "gif"],
+        "enum": [
+          "webp",
+          "gif"
+        ],
         "default": "webp",
         "description": "Video animation format: 'webp' (24-bit truecolor high compression) or 'gif'."
       },
@@ -54,6 +65,8 @@
         "description": "Safety timeout in seconds to auto-stop recording and prevent runaway memory usage."
       }
     },
-    "required": ["action"]
+    "required": [
+      "action"
+    ]
   }
 }

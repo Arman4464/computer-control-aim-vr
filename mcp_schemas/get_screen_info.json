@@ -1,1 +1,9 @@
-{"name":"get_screen_info","description":"Returns multi-monitor virtual screen bounds, display resolution, DPI awareness, process elevation (admin status), and active foreground window info.","parameters":{"additionalProperties":false,"properties":{},"type":"object"}}
+{
+  "name": "get_screen_info",
+  "description": "Returns multi-monitor virtual screen bounds, display resolution, DPI awareness, process elevation (admin status), and active foreground window info.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  }
+}

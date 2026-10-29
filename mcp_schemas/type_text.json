@@ -1,1 +1,22 @@
-{"name":"type_text","description":"Types text using layout-independent Unicode key events (KEYEVENTF_UNICODE).","parameters":{"additionalProperties":false,"properties":{"interval":{"default":0.01,"description":"Delay between keystrokes in seconds.","type":"number"},"text":{"description":"Text to type.","type":"string"}},"required":["text"],"type":"object"}}
+{
+  "name": "type_text",
+  "description": "Types text using layout-independent Unicode key events (KEYEVENTF_UNICODE).",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "interval": {
+        "default": 0.01,
+        "description": "Delay between keystrokes in seconds.",
+        "type": "number"
+      },
+      "text": {
+        "description": "Text to type.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "text"
+    ],
+    "type": "object"
+  }
+}

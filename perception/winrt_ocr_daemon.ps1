@@ -51,7 +51,7 @@ while ($line = [Console]::In.ReadLine()) {
         }
         # Force array encapsulation to prevent single-element flattening in PS 5.1
         $wordsOut = @($words)
-        $json = ConvertTo-Json -Compress @{ status = "ok"; text = $ocrResult.Text; words = $wordsOut }
+        $json = ConvertTo-Json -Depth 10 -Compress @{ status = "ok"; text = $ocrResult.Text; words = $wordsOut }
         [Console]::Out.WriteLine($json)
         [Console]::Out.Flush()
     } catch {

@@ -1,1 +1,18 @@
-{"name":"ocr_screen","description":"Performs local sub-15ms text recognition on the screen or a target window using native Windows WinRT OCR. Returns recognized text and all word bounding boxes with exact physical coordinates.","parameters":{"additionalProperties":false,"properties":{"query":{"description":"Optional text to search for; returns exact match coordinates.","type":"string"},"target":{"description":"Optional window title substring to scope OCR to.","type":"string"}},"type":"object"}}
+{
+  "name": "ocr_screen",
+  "description": "Performs local sub-15ms text recognition on the screen or a target window using native Windows WinRT OCR. Returns recognized text and all word bounding boxes with exact physical coordinates.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "query": {
+        "description": "Optional text to search for; returns exact match coordinates.",
+        "type": "string"
+      },
+      "target": {
+        "description": "Optional window title substring to scope OCR to.",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "find_element",
   "description": "Locates a UI element by text, label, or role using hybrid UIA + sub-15ms WinRT OCR. Returns its exact physical screen bounding box [x, y, w, h] and center (cx, cy) coordinates. Supports scope='modal' to target active dialogs.",
-  "parameters": {
+  "inputSchema": {
     "type": "object",
     "properties": {
       "query": {
@@ -18,12 +18,18 @@
       },
       "scope": {
         "type": "string",
-        "enum": ["all", "modal", "dialog"],
+        "enum": [
+          "all",
+          "modal",
+          "dialog"
+        ],
         "default": "all",
         "description": "Optional search scope: 'modal' restricts search to the active overlay/dialog, completely ignoring background text."
       }
     },
-    "required": ["query"],
+    "required": [
+      "query"
+    ],
     "additionalProperties": false
   }
 }

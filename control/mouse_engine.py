@@ -92,6 +92,12 @@ user32.GetSystemMetrics.restype = ctypes.c_int
 user32.mouse_event.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, ULONG_PTR]
 user32.mouse_event.restype = None
 
+# Strict 64-bit user32 prototypes for WindowFromPoint and GetAncestor
+user32.WindowFromPoint.argtypes = [POINT]
+user32.WindowFromPoint.restype = wintypes.HWND
+user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+user32.GetAncestor.restype = wintypes.HWND
+
 if hasattr(user32, "SetProcessDpiAwarenessContext"):
     user32.SetProcessDpiAwarenessContext.argtypes = [ctypes.c_void_p]
     user32.SetProcessDpiAwarenessContext.restype = wintypes.BOOL
@@ -377,6 +383,7 @@ class MouseEngine:
                 norm_x,
                 norm_y
             )
+            user32.SetCursorPos(interp_x, interp_y)
             time.sleep(step_delay)
 
         user32.SetCursorPos(e_x, e_y)

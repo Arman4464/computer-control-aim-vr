@@ -1,1 +1,33 @@
-{"name":"scroll","description":"Scrolls mouse wheel. Positive clicks scroll up; negative clicks scroll down.","parameters":{"additionalProperties":false,"properties":{"clicks":{"description":"Number of scroll clicks (+up, -down).","type":"integer"},"coords_mode":{"default":"pixel","enum":["pixel","normalized_1000"],"type":"string"},"x":{"description":"Optional X coordinate before scrolling.","type":"number"},"y":{"description":"Optional Y coordinate before scrolling.","type":"number"}},"required":["clicks"],"type":"object"}}
+{
+  "name": "scroll",
+  "description": "Scrolls mouse wheel. Positive clicks scroll up; negative clicks scroll down.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "clicks": {
+        "description": "Number of scroll clicks (+up, -down).",
+        "type": "integer"
+      },
+      "coords_mode": {
+        "default": "pixel",
+        "enum": [
+          "pixel",
+          "normalized_1000"
+        ],
+        "type": "string"
+      },
+      "x": {
+        "description": "Optional X coordinate before scrolling.",
+        "type": "number"
+      },
+      "y": {
+        "description": "Optional Y coordinate before scrolling.",
+        "type": "number"
+      }
+    },
+    "required": [
+      "clicks"
+    ],
+    "type": "object"
+  }
+}

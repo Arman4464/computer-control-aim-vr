@@ -47,10 +47,19 @@ function findElement(selector, textMatch) {
   }
 
   // Text search fallback
+  // Text search fallback: prioritize interactive controls before generic containers
   if (textMatch) {
     const q = textMatch.toLowerCase().trim();
-    const candidates = Array.from(document.querySelectorAll("button, a, input, textarea, [role='button'], span, div, h1, h2, h3, p"));
-    for (const el of candidates) {
+    // 1. Search interactive controls first
+    const interactive = Array.from(document.querySelectorAll("button, input, [role='button'], a, [role='link'], [role='menuitem'], [role='tab'], textarea, select"));
+    for (const el of interactive) {
+      if ((el.innerText || el.textContent || el.value || "").toLowerCase().includes(q)) {
+        return el;
+      }
+    }
+    // 2. Fallback to generic layout and text elements
+    const generic = Array.from(document.querySelectorAll("label, span, p, h1, h2, h3, h4, div, li, td"));
+    for (const el of generic) {
       if ((el.innerText || el.textContent || "").toLowerCase().includes(q)) {
         return el;
       }
@@ -84,10 +93,6 @@ function executeClick(params) {
       clientY: cy
     });
     el.dispatchEvent(ev);
-  }
-
-  if (typeof el.click === "function") {
-    el.click();
   }
 
   return {

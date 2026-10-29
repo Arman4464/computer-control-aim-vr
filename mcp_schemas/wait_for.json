@@ -1,12 +1,17 @@
 {
   "name": "wait_for",
   "description": "Waits locally inside the engine until a UI condition (text_exists, window_exists, window_active, element_exists) is satisfied or timeout expires, eliminating slow LLM polling loops.",
-  "parameters": {
+  "inputSchema": {
     "type": "object",
     "properties": {
       "condition": {
         "type": "string",
-        "enum": ["text_exists", "window_exists", "window_active", "element_exists"],
+        "enum": [
+          "text_exists",
+          "window_exists",
+          "window_active",
+          "element_exists"
+        ],
         "description": "Condition to wait for."
       },
       "target": {
@@ -28,6 +33,8 @@
         "description": "Polling interval in seconds between checks."
       }
     },
-    "required": ["condition"]
+    "required": [
+      "condition"
+    ]
   }
 }

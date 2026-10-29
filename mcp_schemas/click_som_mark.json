@@ -1,0 +1,32 @@
+{
+  "name": "click_som_mark",
+  "description": "Clicks an indexed UI element corresponding to badge mark number [1], [2], [3]... previously produced by take_som_screenshot. Guarantees 100% precision motor action.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "mark_id": {
+        "type": "integer",
+        "description": "The mark number to click (e.g. 1, 2, 14)."
+      },
+      "button": {
+        "type": "string",
+        "enum": [
+          "left",
+          "right",
+          "middle"
+        ],
+        "default": "left",
+        "description": "Mouse button to click."
+      },
+      "clicks": {
+        "type": "integer",
+        "default": 1,
+        "description": "Number of clicks (1 for single, 2 for double, 3 for triple)."
+      }
+    },
+    "required": [
+      "mark_id"
+    ],
+    "additionalProperties": false
+  }
+}

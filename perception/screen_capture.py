@@ -7,6 +7,7 @@ and perceptual delta-diff computation to minimize token consumption.
 import ctypes
 from ctypes import wintypes
 import io
+import time
 import base64
 import sys
 from typing import Optional, Tuple, Dict, Any, List
@@ -239,10 +240,15 @@ def list_visible_windows() -> List[Dict[str, Any]]:
                     return True
 
                 is_iconic = bool(user32.IsIconic(hwnd))
-                rect = wintypes.RECT()
-                user32.GetWindowRect(hwnd, ctypes.byref(rect))
-                w = rect.right - rect.left
-                h = rect.bottom - rect.top
+                ext = get_window_extended_bounds(hwnd)
+                if ext[2] > 0 and ext[3] > 0:
+                    win_bounds = [int(ext[0]), int(ext[1]), int(ext[2]), int(ext[3])]
+                else:
+                    rect = wintypes.RECT()
+                    user32.GetWindowRect(hwnd, ctypes.byref(rect))
+                    w = rect.right - rect.left
+                    h = rect.bottom - rect.top
+                    win_bounds = [int(rect.left), int(rect.top), int(w), int(h)]
 
                 # Check virtual desktop placement (Task View)
                 on_cur = True
@@ -257,16 +263,16 @@ def list_visible_windows() -> List[Dict[str, Any]]:
                     windows.append({
                         "hwnd": int(hwnd),
                         "title": title,
-                        "bounds": [int(rect.left), int(rect.top), int(w), int(h)],
+                        "bounds": win_bounds,
                         "is_minimized": True,
                         "pid": int(pid.value),
                         "on_current_desktop": on_cur,
                     })
-                elif w > 0 and h > 0 and rect.left > -30000:
+                elif win_bounds[2] > 0 and win_bounds[3] > 0 and win_bounds[0] > -30000:
                     windows.append({
                         "hwnd": int(hwnd),
                         "title": title,
-                        "bounds": [int(rect.left), int(rect.top), int(w), int(h)],
+                        "bounds": win_bounds,
                         "is_minimized": False,
                         "pid": int(pid.value),
                         "on_current_desktop": on_cur,
@@ -429,15 +435,20 @@ def get_foreground_window_info() -> Optional[Dict[str, Any]]:
         user32.GetWindowTextW(hwnd, buff, length + 1)
         title = buff.value
 
-    rect = wintypes.RECT()
-    user32.GetWindowRect(hwnd, ctypes.byref(rect))
-    w = rect.right - rect.left
-    h = rect.bottom - rect.top
+    ext = get_window_extended_bounds(hwnd)
+    if ext[2] > 0 and ext[3] > 0:
+        bounds = [int(ext[0]), int(ext[1]), int(ext[2]), int(ext[3])]
+    else:
+        rect = wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        w = rect.right - rect.left
+        h = rect.bottom - rect.top
+        bounds = [int(rect.left), int(rect.top), int(w), int(h)]
 
     return {
         "hwnd": int(hwnd),
         "title": title,
-        "bounds": [int(rect.left), int(rect.top), int(w), int(h)]
+        "bounds": bounds
     }
 
 

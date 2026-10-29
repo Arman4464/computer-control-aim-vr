@@ -1,1 +1,19 @@
-{"name":"mouse_down","description":"Presses and holds a mouse button.","parameters":{"additionalProperties":false,"properties":{"button":{"default":"left","enum":["left","right","middle"],"type":"string"}},"type":"object"}}
+{
+  "name": "mouse_down",
+  "description": "Presses and holds a mouse button.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "button": {
+        "default": "left",
+        "enum": [
+          "left",
+          "right",
+          "middle"
+        ],
+        "type": "string"
+      }
+    },
+    "type": "object"
+  }
+}

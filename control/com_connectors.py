@@ -381,6 +381,10 @@ class BrowserCDPConnector:
                     break
                 resp += chunk
 
+            if b"101" not in resp:
+                s.close()
+                return False
+
             payload = json.dumps({"id": 1, "method": method, "params": params}).encode("utf-8")
             mask_key = secrets.token_bytes(4)
             length = len(payload)
@@ -394,6 +398,11 @@ class BrowserCDPConnector:
             masked = bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload))
             s.sendall(header + masked)
             time.sleep(0.05)
+            try:
+                s.settimeout(0.5)
+                s.recv(1024)
+            except Exception:
+                pass
             s.close()
             return True
         except Exception as e:

@@ -35,6 +35,12 @@ shell32.ShellExecuteW.restype = wintypes.HINSTANCE
 # Track spawned background processes to prevent garbage-collection ResourceWarnings
 _TRACKED_PROCESSES: List[subprocess.Popen] = []
 
+
+def _prune_tracked_processes():
+    """Prunes terminated Popen objects from _TRACKED_PROCESSES to prevent handle leaks."""
+    global _TRACKED_PROCESSES
+    _TRACKED_PROCESSES = [p for p in _TRACKED_PROCESSES if p.poll() is None]
+
 KNOWN_APPS = {
     "chrome": [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -161,6 +167,7 @@ def launch_application(name: str, args: Optional[str] = None, timeout: float = 3
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        _prune_tracked_processes()
         _TRACKED_PROCESSES.append(proc)
     except Exception as e:
         return {

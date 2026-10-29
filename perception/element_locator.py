@@ -24,12 +24,14 @@ if PACKAGE_ROOT not in sys.path:
     sys.path.insert(0, PACKAGE_ROOT)
 
 from control.safety import ensure_interactive_desktop, get_physical_cursor_pos
+from control.mouse_engine import get_virtual_screen_bounds
 from perception.screen_capture import (
     capture_screen,
     capture_window,
     find_window,
     get_foreground_window_info,
     default_capture_manager,
+    get_window_extended_bounds,
 )
 from perception.uia_inspector import find_element_by_query
 from perception.winrt_ocr import default_ocr
@@ -123,9 +125,14 @@ class ElementLocator:
             win = find_window(target_window)
             if win:
                 img = capture_window(win["hwnd"])
-                bounds = win.get("bounds", [0, 0, 0, 0])
-                screen_offset_x = max(0, bounds[0])
-                screen_offset_y = max(0, bounds[1])
+                ext = get_window_extended_bounds(win["hwnd"])
+                if ext[2] > 0 and ext[3] > 0:
+                    screen_offset_x = ext[0]
+                    screen_offset_y = ext[1]
+                else:
+                    bounds = win.get("bounds", [0, 0, 0, 0])
+                    screen_offset_x = bounds[0]
+                    screen_offset_y = bounds[1]
 
         if img is None:
             img = capture_screen()
@@ -177,9 +184,14 @@ class ElementLocator:
             win = find_window(target_window)
             if win:
                 img = capture_window(win["hwnd"])
-                bounds = win.get("bounds", [0, 0, 0, 0])
-                screen_offset_x = max(0, bounds[0])
-                screen_offset_y = max(0, bounds[1])
+                ext = get_window_extended_bounds(win["hwnd"])
+                if ext[2] > 0 and ext[3] > 0:
+                    screen_offset_x = ext[0]
+                    screen_offset_y = ext[1]
+                else:
+                    bounds = win.get("bounds", [0, 0, 0, 0])
+                    screen_offset_x = bounds[0]
+                    screen_offset_y = bounds[1]
             else:
                 img = capture_screen()
         else:

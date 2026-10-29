@@ -1,7 +1,7 @@
 {
   "name": "notify",
   "description": "Sends a native Windows Action Center toast notification with optional sound.",
-  "parameters": {
+  "inputSchema": {
     "type": "object",
     "properties": {
       "title": {
@@ -22,6 +22,9 @@
         "description": "Whether to play notification sound."
       }
     },
-    "required": ["title", "message"]
+    "required": [
+      "title",
+      "message"
+    ]
   }
 }

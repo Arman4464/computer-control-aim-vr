@@ -1,12 +1,18 @@
 {
   "name": "registry",
   "description": "Reads, writes, deletes, or lists Windows Registry keys and values (HKCU, HKLM, HKCR, HKU, HKCC) with 64-bit/32-bit view awareness.",
-  "parameters": {
+  "inputSchema": {
     "type": "object",
     "properties": {
       "mode": {
         "type": "string",
-        "enum": ["get", "set", "delete_value", "delete_key", "list"],
+        "enum": [
+          "get",
+          "set",
+          "delete_value",
+          "delete_key",
+          "list"
+        ],
         "description": "Registry operation mode: 'get' reads a value, 'set' creates/updates, 'delete_value' removes a value, 'delete_key' removes a key, 'list' enumerates subkeys and values."
       },
       "path": {
@@ -22,7 +28,14 @@
       },
       "val_type": {
         "type": "string",
-        "enum": ["string", "dword", "qword", "binary", "expand_sz", "multi_sz"],
+        "enum": [
+          "string",
+          "dword",
+          "qword",
+          "binary",
+          "expand_sz",
+          "multi_sz"
+        ],
         "default": "string",
         "description": "Data type for mode='set'."
       },
@@ -32,6 +45,9 @@
         "description": "Whether to access the 64-bit registry view (KEY_WOW64_64KEY). Defaults to true."
       }
     },
-    "required": ["mode", "path"]
+    "required": [
+      "mode",
+      "path"
+    ]
   }
 }

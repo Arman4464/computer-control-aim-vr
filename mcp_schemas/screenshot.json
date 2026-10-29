@@ -1,1 +1,49 @@
-{"name":"screenshot","description":"Captures a screenshot of the virtual desktop, target window, or Picture-in-Picture sandbox desktop. Supports Set-of-Marks (SOM) overlays (som=True), cluster density zoom (cluster_zoom=True), heuristic icon detection (detect_icons=True), differential dirty-rect crops (mode='delta'), and isolated sandbox preview (mode='pip').","parameters":{"additionalProperties":false,"properties":{"cluster_zoom":{"default":false,"description":"When true in SOM mode, automatically zooms into the densest cluster of controls (e.g. ribbon/toolbar) for high-precision targeting.","type":"boolean"},"detect_icons":{"default":true,"description":"When true in SOM mode, runs local heuristic icon detection to ground buttons in non-UIA GPU-rendered apps.","type":"boolean"},"max_dim":{"default":1024,"description":"Maximum dimension for image downsampling (default 1024 keeps image tokens at ~250 tokens).","type":"integer"},"mode":{"default":"full","description":"Capture mode: 'full' captures the full view, 'delta' transmits changed bounding box, and 'pip' captures the Picture-in-Picture sandbox preview.","enum":["full","delta","pip"],"type":"string"},"quality":{"default":75,"description":"JPEG compression quality (1-100).","type":"integer"},"som":{"default":false,"description":"When true, overlays numbered Set-of-Marks (SOM) badges on interactive elements for direct integer clicking.","type":"boolean"},"target":{"description":"Optional window title substring to capture only that window (e.g. 'Notepad'). Default captures full desktop.","type":"string"}},"type":"object"}}
+{
+  "name": "screenshot",
+  "description": "Captures a screenshot of the virtual desktop, target window, or Picture-in-Picture sandbox desktop. Supports Set-of-Marks (SOM) overlays (som=True), cluster density zoom (cluster_zoom=True), heuristic icon detection (detect_icons=True), differential dirty-rect crops (mode='delta'), and isolated sandbox preview (mode='pip').",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "cluster_zoom": {
+        "default": false,
+        "description": "When true in SOM mode, automatically zooms into the densest cluster of controls (e.g. ribbon/toolbar) for high-precision targeting.",
+        "type": "boolean"
+      },
+      "detect_icons": {
+        "default": true,
+        "description": "When true in SOM mode, runs local heuristic icon detection to ground buttons in non-UIA GPU-rendered apps.",
+        "type": "boolean"
+      },
+      "max_dim": {
+        "default": 1024,
+        "description": "Maximum dimension for image downsampling (default 1024 keeps image tokens at ~250 tokens).",
+        "type": "integer"
+      },
+      "mode": {
+        "default": "full",
+        "description": "Capture mode: 'full' captures the full view, 'delta' transmits changed bounding box, and 'pip' captures the Picture-in-Picture sandbox preview.",
+        "enum": [
+          "full",
+          "delta",
+          "pip"
+        ],
+        "type": "string"
+      },
+      "quality": {
+        "default": 75,
+        "description": "JPEG compression quality (1-100).",
+        "type": "integer"
+      },
+      "som": {
+        "default": false,
+        "description": "When true, overlays numbered Set-of-Marks (SOM) badges on interactive elements for direct integer clicking.",
+        "type": "boolean"
+      },
+      "target": {
+        "description": "Optional window title substring to capture only that window (e.g. 'Notepad'). Default captures full desktop.",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  }
+}

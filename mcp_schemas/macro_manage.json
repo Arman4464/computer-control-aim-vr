@@ -1,0 +1,32 @@
+{
+  "name": "macro_manage",
+  "description": "Manages stored semantic macros: list all saved macros, inspect steps, delete old macros, or export/import definitions.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "list",
+          "get",
+          "delete",
+          "export",
+          "import"
+        ],
+        "description": "Management action to perform."
+      },
+      "name": {
+        "type": "string",
+        "description": "Name of target macro (required for get, delete, export, import)."
+      },
+      "macro_data": {
+        "type": "object",
+        "description": "Macro JSON payload (required for import)."
+      }
+    },
+    "required": [
+      "action"
+    ],
+    "additionalProperties": false
+  }
+}

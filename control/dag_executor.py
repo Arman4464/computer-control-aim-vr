@@ -543,6 +543,16 @@ class DAGExecutor:
             elif action == "triple_click":
                 clicks = 3
             btn = "right" if action == "right_click" else args.get("button", "left")
+
+            # Resolve semantic query / text if coordinates not provided
+            if x is None and y is None:
+                query = args.get("query") or args.get("text") or args.get("label") or args.get("element_name")
+                if query:
+                    from perception.element_locator import default_locator
+                    elem = default_locator.locate(query, target_window=target, role=args.get("element_role"))
+                    if elem and elem.get("center"):
+                        x, y = elem["center"]
+
             cx, cy = default_mouse.click(x=x, y=y, button=btn, clicks=clicks)
             return {"clicked_x": cx, "clicked_y": cy, "button": btn, "clicks": clicks}
 
@@ -567,8 +577,21 @@ class DAGExecutor:
             return {"dragged_to": [int(args["end_x"]), int(args["end_y"])]}
 
         elif action == "scroll":
-            default_mouse.scroll(int(args.get("delta_y", 0)), int(args.get("delta_x", 0)))
-            return {"scroll": [args.get("delta_x", 0), args.get("delta_y", 0)]}
+            clicks_val = args.get("clicks")
+            delta_y = args.get("delta_y")
+            delta_x = args.get("delta_x", 0)
+
+            if delta_y is None:
+                delta_y = clicks_val if clicks_val is not None else 0
+
+            dy = int(delta_y)
+            dx = int(delta_x)
+
+            if dx != 0:
+                default_mouse.scroll_horizontal(dx)
+            if dy != 0:
+                default_mouse.scroll(dy)
+            return {"scroll": [dx, dy]}
 
         elif action == "type_text":
             text = args.get("text", "")
@@ -783,6 +806,7 @@ class DAGExecutor:
             "status": "success",
             "total_steps": len(compiled_steps),
             "executed_steps": len(trace),
+            "completed_steps": len(trace),
             "total_time_ms": round((time.time() - start_total) * 1000, 2),
             "trace": trace,
         }

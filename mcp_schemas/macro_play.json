@@ -1,0 +1,32 @@
+{
+  "name": "macro_play",
+  "description": "Executes a recorded semantic macro with 5-Tier Self-Healing fallback resolution (Tier 1 UIA -> Tier 2 OCR token -> Tier 3 32x32 pHash -> Tier 4 client offset) and Tier 5 message pump synchronization barriers.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Name of the macro to play."
+      },
+      "speed_multiplier": {
+        "type": "number",
+        "default": 1.0,
+        "description": "Playback speed multiplier (1.0 = native, 2.0 = 2x speed, 0.0 = fastest/zero delay)."
+      },
+      "dry_run": {
+        "type": "boolean",
+        "default": false,
+        "description": "When true, simulates self-healing resolution and execution without dispatching actual physical mouse/keyboard events."
+      },
+      "self_heal": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable 5-tier dynamic self-healing anchor resolution across window reflows and DPI scaling."
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "additionalProperties": false
+  }
+}

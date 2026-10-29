@@ -1,1 +1,78 @@
-{"name":"execute_action_dag","description":"Executes a compound Speculative Action DAG in a fast closed loop. Resolves step dependencies topologically, passes variables between steps ({{steps.id.result}}), verifies visual reaction (<30ms) between steps, and provides automatic adaptive reflection and error recovery snapshots on failure.","parameters":{"additionalProperties":false,"properties":{"auto_verify":{"default":true,"description":"Whether to verify interactive steps with visual servoing.","type":"boolean"},"steps":{"description":"List of action step objects in the DAG.","items":{"properties":{"action":{"description":"Tool or action name to execute (e.g. 'com_explorer', 'launch_app', 'click', 'type_text', 'hotkey', 'com_excel').","type":"string"},"args":{"description":"Arguments dictionary for the action. Supports template variables e.g. {{steps.s1.result.path}}.","type":"object"},"depends_on":{"description":"List of step IDs that must succeed before executing this step.","items":{"type":"string"},"type":"array"},"id":{"description":"Unique identifier for this step (e.g. 's1', 'open_folder').","type":"string"},"on_failure":{"default":"abort","description":"'abort' stops execution and captures reflection snapshot; 'continue' logs error and proceeds.","enum":["abort","continue"],"type":"string"},"retries":{"default":0,"description":"Number of retries if step or verification fails.","type":"integer"},"verify":{"default":"auto","description":"Verification strategy: 'auto' (servoing for clicks/keys), 'visual' (strict ImageChops delta/window check), 'none'.","enum":["auto","visual","none"],"type":"string"}},"required":["action"],"type":"object"},"type":"array"},"stop_on_error":{"default":true,"description":"Whether to halt the DAG upon any step failure.","type":"boolean"}},"required":["steps"],"type":"object"}}
+{
+  "name": "execute_action_dag",
+  "description": "Executes a compound Speculative Action DAG in a fast closed loop. Resolves step dependencies topologically, passes variables between steps ({{steps.id.result}}), verifies visual reaction (<30ms) between steps, and provides automatic adaptive reflection and error recovery snapshots on failure.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "auto_verify": {
+        "default": true,
+        "description": "Whether to verify interactive steps with visual servoing.",
+        "type": "boolean"
+      },
+      "steps": {
+        "description": "List of action step objects in the DAG.",
+        "items": {
+          "properties": {
+            "action": {
+              "description": "Tool or action name to execute (e.g. 'com_explorer', 'launch_app', 'click', 'type_text', 'hotkey', 'com_excel').",
+              "type": "string"
+            },
+            "args": {
+              "description": "Arguments dictionary for the action. Supports template variables e.g. {{steps.s1.result.path}}.",
+              "type": "object"
+            },
+            "depends_on": {
+              "description": "List of step IDs that must succeed before executing this step.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "id": {
+              "description": "Unique identifier for this step (e.g. 's1', 'open_folder').",
+              "type": "string"
+            },
+            "on_failure": {
+              "default": "abort",
+              "description": "'abort' stops execution and captures reflection snapshot; 'continue' logs error and proceeds.",
+              "enum": [
+                "abort",
+                "continue"
+              ],
+              "type": "string"
+            },
+            "retries": {
+              "default": 0,
+              "description": "Number of retries if step or verification fails.",
+              "type": "integer"
+            },
+            "verify": {
+              "default": "auto",
+              "description": "Verification strategy: 'auto' (servoing for clicks/keys), 'visual' (strict ImageChops delta/window check), 'none'.",
+              "enum": [
+                "auto",
+                "visual",
+                "none"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "stop_on_error": {
+        "default": true,
+        "description": "Whether to halt the DAG upon any step failure.",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "steps"
+    ],
+    "type": "object"
+  }
+}

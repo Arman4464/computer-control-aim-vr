@@ -1,1 +1,35 @@
-{"name":"configure_safety","description":"Configures safety settings, failsafe corner abort, physical mouse contention detection, speed limiter, and Picture-in-Picture virtual desktop mode.","parameters":{"additionalProperties":false,"properties":{"contention":{"description":"Enable or disable physical user mouse movement contention yield.","type":"boolean"},"desktop_mode":{"description":"Desktop isolation mode: 'interactive' (standard foreground execution) or 'isolated_pip' (runs in background PiP sandbox without moving user's mouse).","enum":["interactive","isolated_pip"],"type":"string"},"failsafe":{"description":"Enable or disable (0, 0) top-left corner failsafe.","type":"boolean"},"speed":{"description":"Execution speed delay between actions.","enum":["fast","normal","step-by-step"],"type":"string"}},"type":"object"}}
+{
+  "name": "configure_safety",
+  "description": "Configures safety settings, failsafe corner abort, physical mouse contention detection, speed limiter, and Picture-in-Picture virtual desktop mode.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "contention": {
+        "description": "Enable or disable physical user mouse movement contention yield.",
+        "type": "boolean"
+      },
+      "desktop_mode": {
+        "description": "Desktop isolation mode: 'interactive' (standard foreground execution) or 'isolated_pip' (runs in background PiP sandbox without moving user's mouse).",
+        "enum": [
+          "interactive",
+          "isolated_pip"
+        ],
+        "type": "string"
+      },
+      "failsafe": {
+        "description": "Enable or disable (0, 0) top-left corner failsafe.",
+        "type": "boolean"
+      },
+      "speed": {
+        "description": "Execution speed delay between actions.",
+        "enum": [
+          "fast",
+          "normal",
+          "step-by-step"
+        ],
+        "type": "string"
+      }
+    },
+    "type": "object"
+  }
+}

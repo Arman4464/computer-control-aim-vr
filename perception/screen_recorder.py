@@ -285,6 +285,8 @@ class ScreenRecorder:
                 if loop_start - self.start_time > self.max_duration:
                     sys.stderr.write("[ScreenRecorder] Reached max duration safety cutoff. Stopping loop.\n")
                     self._recording = False
+                    self.frames.clear()
+                    self.frame_timestamps.clear()
                     break
 
             try:
@@ -320,6 +322,13 @@ class ScreenRecorder:
 
                 with self._lock:
                     if self._recording:
+                        max_frames = int(self.fps * self.max_duration)
+                        if len(self.frames) >= max_frames:
+                            sys.stderr.write("[ScreenRecorder] Frame buffer reached maximum capacity. Auto-resetting session.\n")
+                            self._recording = False
+                            self.frames.clear()
+                            self.frame_timestamps.clear()
+                            break
                         self.frames.append(frame_img)
                         self.frame_timestamps.append(loop_start)
 

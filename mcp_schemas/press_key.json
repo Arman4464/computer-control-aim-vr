@@ -1,1 +1,17 @@
-{"name":"press_key","description":"Presses a single keyboard key (e.g. 'enter', 'tab', 'esc', 'backspace', 'delete', 'space', 'f1'-'f12', arrows).","parameters":{"additionalProperties":false,"properties":{"key":{"description":"Key name to press.","type":"string"}},"required":["key"],"type":"object"}}
+{
+  "name": "press_key",
+  "description": "Presses a single keyboard key (e.g. 'enter', 'tab', 'esc', 'backspace', 'delete', 'space', 'f1'-'f12', arrows).",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "key": {
+        "description": "Key name to press.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "key"
+    ],
+    "type": "object"
+  }
+}

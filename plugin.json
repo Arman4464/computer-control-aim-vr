@@ -25,6 +25,7 @@
     "winrt-ocr",
     "virtual-desktop",
     "pip-sandbox",
-    "com-connectors"
+    "com-connectors",
+    "macro-engine"
   ]
 }

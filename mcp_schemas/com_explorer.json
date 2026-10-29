@@ -1,1 +1,26 @@
-{"name":"com_explorer","description":"Direct Windows Shell.Application COM connector for File Explorer. Allows zero-token instantaneous folder opening, path navigation, window enumeration, and selected item retrieval.","parameters":{"additionalProperties":false,"properties":{"action":{"description":"Action: 'list' open Explorer windows and paths, 'open' navigates/opens a folder path, 'get_selected' gets selected files.","enum":["list","open","get_selected"],"type":"string"},"path":{"description":"Filesystem path to open (required for action='open').","type":"string"}},"required":["action"],"type":"object"}}
+{
+  "name": "com_explorer",
+  "description": "Direct Windows Shell.Application COM connector for File Explorer. Allows zero-token instantaneous folder opening, path navigation, window enumeration, and selected item retrieval.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "description": "Action: 'list' open Explorer windows and paths, 'open' navigates/opens a folder path, 'get_selected' gets selected files.",
+        "enum": [
+          "list",
+          "open",
+          "get_selected"
+        ],
+        "type": "string"
+      },
+      "path": {
+        "description": "Filesystem path to open (required for action='open').",
+        "type": "string"
+      }
+    },
+    "required": [
+      "action"
+    ],
+    "type": "object"
+  }
+}

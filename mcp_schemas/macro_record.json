@@ -1,0 +1,36 @@
+{
+  "name": "macro_record",
+  "description": "Controls Hybrid Semantic Macro recording. Captures user/agent interactions, attaches 5-Tier Semantic Anchors (UIA, WinRT OCR token, 32x32 pHash, DPI-normalized client ratio), and applies RDP polyline compression to trajectories.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "start",
+          "stop",
+          "status",
+          "cancel"
+        ],
+        "description": "Recorder action: start, stop, status, or cancel."
+      },
+      "name": {
+        "type": "string",
+        "description": "Unique identifier / filename for the macro (required for start)."
+      },
+      "target": {
+        "type": "string",
+        "description": "Optional window title substring to scope recording strictly to that application window."
+      },
+      "capture_trajectories": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether to record continuous mouse trajectory paths with RDP compression."
+      }
+    },
+    "required": [
+      "action"
+    ],
+    "additionalProperties": false
+  }
+}

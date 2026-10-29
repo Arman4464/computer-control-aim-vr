@@ -229,17 +229,21 @@ class ComputerControlSidecarHandler(BaseHTTPRequestHandler):
 
         try:
             if action == "focus":
-                success = focus_window(target)
-                result = {"action": "focus", "target": target, "success": success}
+                win = default_window_manager.get_window(target)
+                if win and win.get("hwnd"):
+                    success = focus_window(win["hwnd"])
+                    result = {"action": "focus", "target": target, "hwnd": win["hwnd"], "success": success}
+                else:
+                    result = {"action": "focus", "target": target, "success": False, "error": f"Window '{target}' not found"}
 
             elif action == "snap":
                 pos = payload.get("position", "left")
-                res = default_window_manager.snap_window(target, pos)
+                res = default_window_manager.snap(target, pos)
                 result = {"action": "snap", "target": target, "position": pos, "result": res}
 
             elif action == "state":
                 st = payload.get("state", "restore")
-                res = default_window_manager.set_window_state(target, st)
+                res = default_window_manager.set_state(target, st)
                 result = {"action": "state", "target": target, "state": st, "result": res}
 
             elif action == "close":

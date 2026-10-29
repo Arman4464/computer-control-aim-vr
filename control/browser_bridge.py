@@ -12,7 +12,7 @@ import uuid
 import queue
 import logging
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from typing import Dict, Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -134,7 +134,7 @@ class BrowserBridge:
                 return True
 
             try:
-                self.server = HTTPServer(("127.0.0.1", self.port), BrowserBridgeHandler)
+                self.server = ThreadingHTTPServer(("127.0.0.1", self.port), BrowserBridgeHandler)
                 self.server.bridge_instance = self
                 self._running = True
                 self.server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)

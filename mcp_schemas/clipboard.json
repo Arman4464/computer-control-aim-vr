@@ -1,1 +1,31 @@
-{"name":"clipboard","description":"High-performance Win32 native clipboard manager. Get current clipboard text, set clipboard text, or instantly paste multiline text/code via Ctrl+V without dropped characters.","parameters":{"additionalProperties":false,"properties":{"action":{"description":"Clipboard action: 'get' text, 'set' text, or 'paste' text via simulated Ctrl+V.","enum":["get","set","paste"],"type":"string"},"restore":{"default":false,"description":"If true during paste, restores previous clipboard content after pasting.","type":"boolean"},"text":{"description":"Text to set or paste (required for action='set' or 'paste').","type":"string"}},"required":["action"],"type":"object"}}
+{
+  "name": "clipboard",
+  "description": "High-performance Win32 native clipboard manager. Get current clipboard text, set clipboard text, or instantly paste multiline text/code via Ctrl+V without dropped characters.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "description": "Clipboard action: 'get' text, 'set' text, or 'paste' text via simulated Ctrl+V.",
+        "enum": [
+          "get",
+          "set",
+          "paste"
+        ],
+        "type": "string"
+      },
+      "restore": {
+        "default": false,
+        "description": "If true during paste, restores previous clipboard content after pasting.",
+        "type": "boolean"
+      },
+      "text": {
+        "description": "Text to set or paste (required for action='set' or 'paste').",
+        "type": "string"
+      }
+    },
+    "required": [
+      "action"
+    ],
+    "type": "object"
+  }
+}

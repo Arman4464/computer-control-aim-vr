@@ -1,7 +1,7 @@
 {
   "name": "click",
   "description": "Performs a mouse click. Can click raw pixel coordinates (x, y), a Set-of-Marks mark ID (mark_id), a dynamic text label (text/query) via sub-15ms WinRT OCR, or a semantic UIA control (element_name, element_role).",
-  "parameters": {
+  "inputSchema": {
     "type": "object",
     "properties": {
       "text": {
@@ -34,19 +34,30 @@
       },
       "button": {
         "type": "string",
-        "enum": ["left", "right", "middle"],
+        "enum": [
+          "left",
+          "right",
+          "middle"
+        ],
         "default": "left",
         "description": "Mouse button to click."
       },
       "clicks": {
         "type": "integer",
-        "enum": [1, 2, 3],
+        "enum": [
+          1,
+          2,
+          3
+        ],
         "default": 1,
         "description": "Number of clicks: 1 for single click, 2 for double click, 3 for triple click."
       },
       "coords_mode": {
         "type": "string",
-        "enum": ["pixel", "normalized_1000"],
+        "enum": [
+          "pixel",
+          "normalized_1000"
+        ],
         "default": "pixel",
         "description": "Coordinate space for (x, y): 'pixel' for screen pixels, 'normalized_1000' for [0..1000]."
       },

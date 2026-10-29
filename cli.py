@@ -64,12 +64,14 @@ def parse_flexible_json(content: str) -> Any:
 
 def main():
     parser = argparse.ArgumentParser(description="AIM-VR 3.0 Computer Control CLI Runner")
+    parser.add_argument("--disable-failsafe", action="store_true", help="Disable corner failsafe (enabled by default)")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # 1. execute: multi-step JSON plan
     exec_parser = subparsers.add_parser("execute", help="Execute multi-step JSON action plan")
     exec_parser.add_argument("steps_json", nargs="+", help="JSON string or file containing list of action steps")
     exec_parser.add_argument("--no-verify", action="store_true", help="Disable visual servoing verification")
+    exec_parser.add_argument("--disable-failsafe", action="store_true", help="Disable corner failsafe (enabled by default)")
     exec_parser.add_argument("--allow-failsafe", action="store_true", help="Keep corner failsafe enabled")
     exec_parser.add_argument("--record", help="Path to save continuous animated WebP screen recording (e.g. assets/demo.webp)")
 
@@ -78,6 +80,7 @@ def main():
     dag_parser.add_argument("dag_json", nargs="+", help="JSON string or file containing action DAG")
     dag_parser.add_argument("--no-verify", action="store_true", help="Disable micro-servoing verification")
     dag_parser.add_argument("--continue-on-error", action="store_true", help="Do not halt DAG when a step fails")
+    dag_parser.add_argument("--disable-failsafe", action="store_true", help="Disable corner failsafe (enabled by default)")
     dag_parser.add_argument("--allow-failsafe", action="store_true", help="Keep corner failsafe enabled")
     dag_parser.add_argument("--record", help="Path to save continuous animated WebP screen recording (e.g. assets/demo.webp)")
 
@@ -227,11 +230,29 @@ def main():
     browser_parser.add_argument("--value", help="Value to set")
     browser_parser.add_argument("--timeout", type=float, default=10.0, help="Timeout in seconds")
 
+    # 24. macro: Hybrid Semantic Macro Engine
+    macro_parser = subparsers.add_parser("macro", help="Hybrid Semantic Macro Engine (record, play, list)")
+    macro_sub = macro_parser.add_subparsers(dest="macro_action", required=True)
+
+    macro_rec = macro_sub.add_parser("record", help="Record a new macro")
+    macro_rec.add_argument("name", help="Macro name to record")
+    macro_rec.add_argument("--target", "-t", help="Target window title substring")
+    macro_rec.add_argument("--no-trajectories", action="store_true", help="Omit trajectory tracking")
+
+    macro_play = macro_sub.add_parser("play", help="Play a recorded macro with 5-tier self-healing")
+    macro_play.add_argument("name", help="Macro name to execute")
+    macro_play.add_argument("--speed", type=float, default=1.0, help="Playback speed multiplier")
+    macro_play.add_argument("--dry-run", action="store_true", help="Simulate execution without sending inputs")
+
+    macro_list = macro_sub.add_parser("list", help="List all saved macros")
+
     args = parser.parse_args()
 
-    # Disable corner failsafe by default during CLI execution to avoid false-positives on parked cursor
-    if not getattr(args, "allow_failsafe", False):
+    # Corner failsafe remains ENABLED by default; use --disable-failsafe to opt out
+    if getattr(args, "disable_failsafe", False):
         default_governor.configure(failsafe=False)
+    else:
+        default_governor.configure(failsafe=True)
 
     server = MCPServer()
 
@@ -582,6 +603,29 @@ def main():
             res, is_err = server.execute_tool("browser_dom_action", params)
         print(res[0]["text"])
         sys.exit(1 if is_err else 0)
+
+    elif args.command == "macro":
+        if args.macro_action == "record":
+            res, is_err = server.execute_tool("macro_record", {
+                "action": "start",
+                "name": args.name,
+                "target": getattr(args, "target", None),
+                "capture_trajectories": not getattr(args, "no_trajectories", False),
+            })
+            print(res[0]["text"])
+            sys.exit(1 if is_err else 0)
+        elif args.macro_action == "play":
+            res, is_err = server.execute_tool("macro_play", {
+                "name": args.name,
+                "speed_multiplier": getattr(args, "speed", 1.0),
+                "dry_run": getattr(args, "dry_run", False),
+            })
+            print(res[0]["text"])
+            sys.exit(1 if is_err else 0)
+        elif args.macro_action == "list":
+            res, is_err = server.execute_tool("macro_manage", {"action": "list"})
+            print(res[0]["text"])
+            sys.exit(1 if is_err else 0)
 
 
 if __name__ == "__main__":

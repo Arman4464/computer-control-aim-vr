@@ -1,0 +1,9 @@
+{
+  "name": "browser_bridge_status",
+  "description": "Checks the health of the companion browser extension loopback bridge and returns active tab metadata.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  }
+}

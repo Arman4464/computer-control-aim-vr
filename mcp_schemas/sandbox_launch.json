@@ -1,1 +1,21 @@
-{"name":"sandbox_launch","description":"Launches an application directly onto the isolated sandbox desktop (WinSta0\\AIMVR_Sandbox). The application window will not appear on the user's physical screen and will not steal mouse or keyboard focus.","parameters":{"additionalProperties":false,"properties":{"command":{"description":"Executable path or command to launch (e.g. 'notepad.exe', 'calc.exe', 'cmd.exe').","type":"string"},"cwd":{"description":"Optional working directory.","type":"string"}},"required":["command"],"type":"object"}}
+{
+  "name": "sandbox_launch",
+  "description": "Launches an application directly onto the isolated sandbox desktop (WinSta0\\AIMVR_Sandbox). The application window will not appear on the user's physical screen and will not steal mouse or keyboard focus.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "command": {
+        "description": "Executable path or command to launch (e.g. 'notepad.exe', 'calc.exe', 'cmd.exe').",
+        "type": "string"
+      },
+      "cwd": {
+        "description": "Optional working directory.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "type": "object"
+  }
+}
