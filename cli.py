@@ -185,6 +185,28 @@ def main():
     rec_parser.add_argument("--max-dim", type=int, default=800, help="Downscale max resolution (default 800)")
     rec_parser.add_argument("--no-cursor", action="store_true", help="Disable physical cursor stamping")
 
+    # 18. notify: Windows toast notification
+    notify_parser = subparsers.add_parser("notify", help="Send native Windows Action Center toast notification")
+    notify_parser.add_argument("message", help="Notification message text")
+    notify_parser.add_argument("--title", default="AIM-VR Notification", help="Notification title header")
+    notify_parser.add_argument("--silent", action="store_true", help="Disable notification sound")
+
+    # 19. registry: Windows registry operations
+    reg_parser = subparsers.add_parser("registry", help="Windows Registry read/write/list")
+    reg_parser.add_argument("mode", choices=["get", "set", "list", "delete_value", "delete_key"], help="Registry operation mode")
+    reg_parser.add_argument("path", help="Registry key path (e.g. 'HKCU\\Software\\MyApp')")
+    reg_parser.add_argument("--name", default="", help="Value name (empty for default)")
+    reg_parser.add_argument("--value", help="Value to write (for mode='set')")
+    reg_parser.add_argument("--type", default="string", help="Data type (string, dword, qword, binary)")
+
+    # 20. waitfor: UI condition waiter
+    waitfor_parser = subparsers.add_parser("waitfor", help="Wait locally for UI condition")
+    waitfor_parser.add_argument("condition", choices=["text_exists", "window_exists", "window_active", "element_exists"], help="Condition to wait for")
+    waitfor_parser.add_argument("--target", help="Target window substring")
+    waitfor_parser.add_argument("--query", help="Text/element query to match")
+    waitfor_parser.add_argument("--timeout", type=float, default=10.0, help="Timeout in seconds")
+    waitfor_parser.add_argument("--interval", type=float, default=0.25, help="Interval between evaluation attempts")
+
     args = parser.parse_args()
 
     # Disable corner failsafe by default during CLI execution to avoid false-positives on parked cursor
@@ -465,6 +487,42 @@ def main():
         else:
             sys.stderr.write("Please specify --start, --stop <path>, or --status for record.\n")
             sys.exit(1)
+
+    elif args.command == "notify":
+        res, is_err = server.execute_tool(
+            "notify",
+            {"title": args.title, "message": args.message, "sound": not args.silent}
+        )
+        print(res[0]["text"])
+        sys.exit(1 if is_err else 0)
+
+    elif args.command == "registry":
+        res, is_err = server.execute_tool(
+            "registry",
+            {
+                "mode": args.mode,
+                "path": args.path,
+                "name": args.name,
+                "value": args.value,
+                "val_type": args.type,
+            }
+        )
+        print(res[0]["text"])
+        sys.exit(1 if is_err else 0)
+
+    elif args.command == "waitfor":
+        res, is_err = server.execute_tool(
+            "wait_for",
+            {
+                "condition": args.condition,
+                "target": args.target,
+                "query": args.query,
+                "timeout": args.timeout,
+                "interval": args.interval,
+            }
+        )
+        print(res[0]["text"])
+        sys.exit(1 if is_err else 0)
 
 
 if __name__ == "__main__":

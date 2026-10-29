@@ -199,6 +199,11 @@ def list_monitors() -> List[Dict[str, Any]]:
 def list_visible_windows() -> List[Dict[str, Any]]:
     """Returns a list of all genuine, active top-level windows with their titles and bounds."""
     ensure_interactive_desktop()
+    try:
+        from control.vdm import default_vdm
+    except Exception:
+        default_vdm = None
+
     windows = []
 
     def enum_cb(hwnd, lparam):
@@ -234,6 +239,14 @@ def list_visible_windows() -> List[Dict[str, Any]]:
                 w = rect.right - rect.left
                 h = rect.bottom - rect.top
 
+                # Check virtual desktop placement (Task View)
+                on_cur = True
+                if default_vdm is not None:
+                    try:
+                        on_cur = default_vdm.is_window_on_current_desktop(hwnd)
+                    except Exception:
+                        on_cur = True
+
                 # Ignore invisible 0x0 or offscreen ghost windows unless explicitly minimized
                 if is_iconic:
                     windows.append({
@@ -241,7 +254,8 @@ def list_visible_windows() -> List[Dict[str, Any]]:
                         "title": title,
                         "bounds": [int(rect.left), int(rect.top), int(w), int(h)],
                         "is_minimized": True,
-                        "pid": int(pid.value)
+                        "pid": int(pid.value),
+                        "on_current_desktop": on_cur,
                     })
                 elif w > 0 and h > 0 and rect.left > -30000:
                     windows.append({
@@ -249,7 +263,8 @@ def list_visible_windows() -> List[Dict[str, Any]]:
                         "title": title,
                         "bounds": [int(rect.left), int(rect.top), int(w), int(h)],
                         "is_minimized": False,
-                        "pid": int(pid.value)
+                        "pid": int(pid.value),
+                        "on_current_desktop": on_cur,
                     })
         return True
 

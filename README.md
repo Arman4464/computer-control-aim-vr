@@ -3,7 +3,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue.svg)](https://microsoft.com)
 [![Python](https://img.shields.io/badge/Python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![MCP Version](https://img.shields.io/badge/MCP-2024--11--05-green.svg)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/Tests-67%2F67%20Passing%20(100%25)-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-71%2F71%20Passing%20(100%25)-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Autonomous In-Memory Vision Runner (AIM-VR 3.0)** is an industrial-grade desktop automation and computer control engine engineered specifically for LLMs and AI agents operating on Windows 10 and 11.
@@ -142,6 +142,9 @@ AIM-VR 3.0 exposes 29 specialized MCP tools adhering to protocol version `2024-1
 | `launch_app` | `name` (string), `args` (string) | Intelligent application resolution via App Paths, PATH, and ShellExecute. |
 | `control_media` | `action` (`volume_up`/`volume_down`/`toggle_mute`/`play_pause`/etc.), `steps` | Non-invasive hardware multimedia control. |
 | `configure_safety` | `speed`, `failsafe`, `contention`, `desktop_mode` | Adjusts execution delay, corner abort, and desktop mode. |
+| `notify` | `title`, `message`, `app_id`, `sound` | Sends native Windows Action Center toast notifications with optional sound. |
+| `registry` | `mode`, `path`, `name`, `value`, `val_type`, `view64` | High-speed native Windows Registry manager (`get`, `set`, `delete_value`, `delete_key`, `list`). |
+| `wait_for` | `condition`, `target`, `query`, `timeout`, `interval` | In-engine polling for UI conditions (`text_exists`, `window_exists`, `window_active`, `element_exists`) to eliminate LLM polling loops. |
 
 ---
 

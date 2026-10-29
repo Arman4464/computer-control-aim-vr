@@ -1,0 +1,27 @@
+{
+  "name": "notify",
+  "description": "Sends a native Windows Action Center toast notification with optional sound.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "description": "Notification title header."
+      },
+      "message": {
+        "type": "string",
+        "description": "Notification body text."
+      },
+      "app_id": {
+        "type": "string",
+        "description": "Optional Windows AppUserModelID."
+      },
+      "sound": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether to play notification sound."
+      }
+    },
+    "required": ["title", "message"]
+  }
+}

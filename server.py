@@ -57,6 +57,9 @@ from control.virtual_desktop import default_virtual_desktop
 from control.com_connectors import default_com_manager
 from control.dag_executor import default_dag_executor, DAGExecutor
 from perception.screen_recorder import default_recorder
+from control.notifications import send_toast_notification
+from control.registry import default_registry
+from control.wait_for import wait_for_condition
 
 # Reconfigure stdout/stdin/stderr to strict UTF-8
 if hasattr(sys.stdin, "reconfigure"):
@@ -494,6 +497,9 @@ TOOLS_DEFINITIONS = [
                                     "control_media",
                                     "invoke_element",
                                     "set_value",
+                                    "notify",
+                                    "registry",
+                                    "wait_for",
                                 ],
                                 "description": "Action type to perform.",
                             },
@@ -840,6 +846,51 @@ TOOLS_DEFINITIONS = [
                 }
             },
             "required": ["action"]
+        }
+    },
+    {
+        "name": "notify",
+        "description": "Sends a native Windows Action Center toast notification with optional sound.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Notification title header."},
+                "message": {"type": "string", "description": "Notification body text."},
+                "app_id": {"type": "string", "description": "Optional AppUserModelID."},
+                "sound": {"type": "boolean", "default": True, "description": "Play notification sound."}
+            },
+            "required": ["title", "message"]
+        }
+    },
+    {
+        "name": "registry",
+        "description": "Reads, writes, deletes, or lists Windows Registry keys and values (HKCU, HKLM, HKCR, HKU, HKCC).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "mode": {"type": "string", "enum": ["get", "set", "delete_value", "delete_key", "list"], "description": "Registry operation mode."},
+                "path": {"type": "string", "description": "Full registry path (e.g. 'HKCU\\Software\\MyApp')."},
+                "name": {"type": "string", "description": "Value name. Empty for default value."},
+                "value": {"description": "Value to write (for mode='set')."},
+                "val_type": {"type": "string", "enum": ["string", "dword", "qword", "binary", "expand_sz", "multi_sz"], "default": "string", "description": "Data type for mode='set'."},
+                "view64": {"type": "boolean", "default": True, "description": "Whether to access 64-bit registry view."}
+            },
+            "required": ["mode", "path"]
+        }
+    },
+    {
+        "name": "wait_for",
+        "description": "Waits locally inside the engine until a UI condition (text_exists, window_exists, window_active, element_exists) is satisfied or timeout expires, eliminating slow LLM polling loops.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "condition": {"type": "string", "enum": ["text_exists", "window_exists", "window_active", "element_exists"], "description": "Condition to wait for."},
+                "target": {"type": "string", "description": "Window title substring."},
+                "query": {"type": "string", "description": "Text or element query to spot."},
+                "timeout": {"type": "number", "default": 10.0, "description": "Maximum seconds to wait."},
+                "interval": {"type": "number", "default": 0.25, "description": "Polling interval in seconds."}
+            },
+            "required": ["condition"]
         }
     },
 ]
@@ -1641,6 +1692,22 @@ class MCPServer:
                         time.sleep(sec)
                         step_record["details"] = f"Waited {sec}s"
 
+                    elif act == "notify":
+                        n_title = step.get("title", "AIM-VR")
+                        n_msg = step.get("message", "")
+                        n_res = send_toast_notification(n_title, n_msg)
+                        step_record["details"] = n_res.get("message", "Toast sent")
+
+                    elif act == "wait_for":
+                        wf_cond = step.get("condition", "window_exists")
+                        wf_target = step.get("target")
+                        wf_query = step.get("query")
+                        wf_timeout = float(step.get("timeout", 10.0))
+                        wf_res = wait_for_condition(wf_cond, target=wf_target, query=wf_query, timeout=wf_timeout)
+                        if wf_res.get("status") != "satisfied":
+                            raise TimeoutError(f"wait_for condition '{wf_cond}' timed out.")
+                        step_record["details"] = f"Condition '{wf_cond}' satisfied in {wf_res.get('elapsed_s')}s"
+
                     elif act == "scroll":
                         clicks = int(step.get("clicks", -3))
                         sx = step.get("x")
@@ -1780,6 +1847,49 @@ class MCPServer:
             else:
                 res = default_recorder.status()
                 return [{"type": "text", "text": json.dumps(res, indent=2)}], False
+
+        elif name == "notify":
+            title = args.get("title", "AIM-VR Notification")
+            message = args.get("message", "")
+            app_id = args.get("app_id")
+            sound = bool(args.get("sound", True))
+            res = send_toast_notification(title=title, message=message, app_id=app_id, sound=sound)
+            is_err = res.get("status") == "error"
+            return [{"type": "text", "text": json.dumps(res, indent=2)}], is_err
+
+        elif name == "registry":
+            mode = args.get("mode", "get")
+            path = args.get("path", "")
+            r_name = args.get("name", "")
+            val = args.get("value")
+            v_type = args.get("val_type", "string")
+            v64 = bool(args.get("view64", True))
+
+            if mode == "get":
+                res = default_registry.get_value(path=path, name=r_name, view64=v64)
+            elif mode == "set":
+                res = default_registry.set_value(path=path, name=r_name, value=val, val_type=v_type, view64=v64)
+            elif mode == "list":
+                res = default_registry.list_key(path=path, view64=v64)
+            elif mode == "delete_value":
+                res = default_registry.delete_value(path=path, name=r_name, view64=v64)
+            elif mode == "delete_key":
+                res = default_registry.delete_key(path=path, view64=v64)
+            else:
+                res = {"status": "error", "message": f"Unknown registry mode: {mode}"}
+
+            is_err = res.get("status") == "error"
+            return [{"type": "text", "text": json.dumps(res, indent=2)}], is_err
+
+        elif name == "wait_for":
+            cond = args.get("condition", "window_exists")
+            w_target = args.get("target")
+            w_query = args.get("query")
+            w_timeout = float(args.get("timeout", 10.0))
+            w_interval = float(args.get("interval", 0.25))
+            res = wait_for_condition(condition=cond, target=w_target, query=w_query, timeout=w_timeout, interval=w_interval)
+            is_err = res.get("status") in ("error", "timeout")
+            return [{"type": "text", "text": json.dumps(res, indent=2)}], is_err
 
         else:
             return [{"type": "text", "text": f"Unknown tool: '{name}'"}], True

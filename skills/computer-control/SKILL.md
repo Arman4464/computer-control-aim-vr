@@ -184,6 +184,32 @@ Organize windows cleanly on any monitor without triggering Windows Snap popup gr
 
 ---
 
+### Recipe D: In-Engine Condition Waiting (`wait_for`)
+Wait locally for an app to launch, a window to become active, or text to appear without slow LLM polling:
+
+```json
+// Wait up to 10s for Chrome to launch and open:
+{"name": "wait_for", "arguments": {"condition": "window_exists", "target": "Chrome", "timeout": 10.0}}
+
+// Wait for a submit button to become visible on page:
+{"name": "wait_for", "arguments": {"condition": "text_exists", "query": "Submit", "timeout": 5.0}}
+```
+
+---
+
+### Recipe E: Native Toast Notifications & System Registry (`notify`, `registry`)
+Notify the user when a long task completes, or read/write system configurations directly:
+
+```json
+// Send native Windows Action Center toast:
+{"name": "notify", "arguments": {"title": "Task Finished", "message": "All items compiled successfully!"}}
+
+// Read a Windows Registry setting:
+{"name": "registry", "arguments": {"mode": "get", "path": "HKCU\\Software\\MyApp", "name": "Version"}}
+```
+
+---
+
 ## 5. Deterministic Troubleshooting & Recovery
 
 | Symptom / Error | Root Cause | Deterministic Fix |
