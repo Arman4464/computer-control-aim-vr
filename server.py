@@ -8,7 +8,7 @@ import sys
 import os
 import json
 import traceback
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple
 
 # Ensure project root is in sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -948,6 +948,89 @@ TOOLS_DEFINITIONS = [
                 "interval": {"type": "number", "default": 0.25, "description": "Polling interval in seconds."}
             },
             "required": ["condition"]
+        }
+    },
+    {
+        "name": "macro_record",
+        "description": "Controls Hybrid Semantic Macro recording. Captures user/agent interactions, attaches 5-Tier Semantic Anchors (UIA, WinRT OCR token, 32x32 pHash, DPI-normalized client ratio), and applies RDP polyline compression to trajectories.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["start", "stop", "status", "cancel"],
+                    "description": "Recorder action: start, stop, status, or cancel."
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Unique identifier / filename for the macro (required for start)."
+                },
+                "target": {
+                    "type": "string",
+                    "description": "Optional window title substring to scope recording strictly to that application window."
+                },
+                "capture_trajectories": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Whether to record continuous mouse trajectory paths with RDP compression."
+                }
+            },
+            "required": ["action"],
+            "additionalProperties": False
+        }
+    },
+    {
+        "name": "macro_play",
+        "description": "Executes a recorded semantic macro with 5-Tier Self-Healing fallback resolution (Tier 1 UIA -> Tier 2 OCR token -> Tier 3 32x32 pHash -> Tier 4 client offset) and Tier 5 message pump synchronization barriers.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Name of the macro to play."
+                },
+                "speed_multiplier": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "Playback speed multiplier (1.0 = native, 2.0 = 2x speed, 0.0 = fastest/zero delay)."
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "When true, simulates self-healing resolution and execution without dispatching actual physical mouse/keyboard events."
+                },
+                "self_heal": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Enable 5-tier dynamic self-healing anchor resolution across window reflows and DPI scaling."
+                }
+            },
+            "required": ["name"],
+            "additionalProperties": False
+        }
+    },
+    {
+        "name": "macro_manage",
+        "description": "Manages stored semantic macros: list all saved macros, inspect steps, delete old macros, or export/import definitions.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["list", "get", "delete", "export", "import"],
+                    "description": "Management action to perform."
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Name of target macro (required for get, delete, export, import)."
+                },
+                "macro_data": {
+                    "type": "object",
+                    "description": "Macro JSON payload (required for import)."
+                }
+            },
+            "required": ["action"],
+            "additionalProperties": False
         }
     },
 ]
@@ -2042,7 +2125,7 @@ class MCPServer:
             from control.macro_engine import default_macro_engine
             act = args.get("action", "status")
             if act == "start":
-                m_name = args.get("name")
+                m_name = args.get("name") or args.get("macro_name")
                 if not m_name:
                     return [{"type": "text", "text": "Error: 'name' parameter is required to start recording."}], True
                 res = default_macro_engine.start_recording(
@@ -2067,14 +2150,14 @@ class MCPServer:
 
         elif name == "macro_play":
             from control.macro_engine import default_macro_engine
-            m_name = args.get("name")
+            m_name = args.get("name") or args.get("macro_name")
             if not m_name:
                 return [{"type": "text", "text": "Error: 'name' parameter is required for macro_play."}], True
             res = default_macro_engine.play_macro(
                 name_or_data=m_name,
-                speed_multiplier=float(args.get("speed_multiplier", 1.0)),
+                speed_multiplier=float(args.get("speed_multiplier", args.get("speed", 1.0))),
                 dry_run=bool(args.get("dry_run", False)),
-                self_heal=bool(args.get("self_heal", True)),
+                self_heal=bool(args.get("self_heal", args.get("self_healing", True))),
             )
             is_err = res.get("status") == "error"
             return [{"type": "text", "text": json.dumps(res, indent=2)}], is_err
@@ -2085,16 +2168,16 @@ class MCPServer:
             if act == "list":
                 res = default_macro_engine.list_macros()
             elif act == "get":
-                m_name = args.get("name", "")
+                m_name = args.get("name") or args.get("macro_name", "")
                 res = default_macro_engine.get_macro(m_name)
                 if res is None:
                     return [{"type": "text", "text": f"Macro '{m_name}' not found."}], True
             elif act == "delete":
-                m_name = args.get("name", "")
+                m_name = args.get("name") or args.get("macro_name", "")
                 ok = default_macro_engine.delete_macro(m_name)
                 res = {"status": "deleted" if ok else "not_found", "name": m_name}
             elif act == "export":
-                m_name = args.get("name", "")
+                m_name = args.get("name") or args.get("macro_name", "")
                 res = default_macro_engine.get_macro(m_name)
                 if res is None:
                     return [{"type": "text", "text": f"Macro '{m_name}' not found."}], True

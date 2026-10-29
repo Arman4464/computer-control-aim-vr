@@ -552,6 +552,8 @@ class DAGExecutor:
                     elem = default_locator.locate(query, target_window=target, role=args.get("element_role"))
                     if elem and elem.get("center"):
                         x, y = elem["center"]
+                    else:
+                        raise ValueError(f"Element matching text/label '{query}' not found via UIA or OCR.")
 
             cx, cy = default_mouse.click(x=x, y=y, button=btn, clicks=clicks)
             return {"clicked_x": cx, "clicked_y": cy, "button": btn, "clicks": clicks}

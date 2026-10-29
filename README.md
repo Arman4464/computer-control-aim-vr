@@ -121,9 +121,9 @@ AIM-VR 3.0 exposes 41 specialized MCP tools adhering to protocol version `2024-1
 ### 4. Hybrid Semantic Macro Engine
 | Tool | Arguments | Purpose |
 |---|---|---|
-| `macro_record` | `action` (`start`/`stop`/`cancel`), `macro_name` | Records mouse and keyboard interactions with 5-tier semantic anchors and RDP polyline compression. |
-| `macro_play` | `macro_name`, `speed`, `self_healing`, `dry_run` | Replays recorded macros with 5-tier self-healing fallback (`UIA -> OCR -> pHash -> Relative -> Sync`). |
-| `macro_manage` | `action` (`list`/`get`/`delete`), `macro_name` | Lists saved macros, retrieves full macro definitions, or deletes recorded macros. |
+| `macro_record` | `action` (`start`/`stop`/`cancel`), `name` | Records mouse and keyboard interactions with 5-tier semantic anchors and RDP polyline compression. |
+| `macro_play` | `name`, `speed_multiplier`, `self_heal`, `dry_run` | Replays recorded macros with 5-tier self-healing fallback (`UIA -> OCR -> pHash -> Relative -> Sync`). |
+| `macro_manage` | `action` (`list`/`get`/`delete`/`export`/`import`), `name`, `macro_data` | Lists saved macros, retrieves full macro definitions, or deletes recorded macros. |
 
 ### 5. Virtual Desktop & PiP Sandboxing
 | Tool | Arguments | Purpose |

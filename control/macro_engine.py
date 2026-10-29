@@ -587,6 +587,21 @@ class MacroEngine:
                     default_mouse.move(target_x, target_y)
                 elif s_action == "hover":
                     default_mouse.hover(target_x, target_y, duration=float(s_args.get("duration", 0.2)))
+                elif s_action == "drag":
+                    default_mouse.drag(
+                        int(s_args.get("start_x", target_x or 0)),
+                        int(s_args.get("start_y", target_y or 0)),
+                        int(s_args.get("end_x", target_x or 0)),
+                        int(s_args.get("end_y", target_y or 0)),
+                        duration=float(s_args.get("duration", 0.3)),
+                    )
+                elif s_action == "scroll":
+                    dy = int(s_args.get("delta_y", s_args.get("clicks", 0)))
+                    dx = int(s_args.get("delta_x", 0))
+                    if dx != 0:
+                        default_mouse.scroll_horizontal(dx)
+                    if dy != 0:
+                        default_mouse.scroll(dy)
                 elif s_action == "type_text":
                     default_keyboard.type_text(s_args.get("text", ""))
                 elif s_action == "press_key":

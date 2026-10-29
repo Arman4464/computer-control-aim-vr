@@ -10,6 +10,16 @@ from control.dag_executor import DAGExecutor
 
 class TestConditionalDAG(unittest.TestCase):
 
+    def setUp(self):
+        from control.safety import default_governor
+        self._orig_contention = default_governor.contention_enabled
+        self._orig_failsafe = default_governor.failsafe_enabled
+        default_governor.configure(failsafe=False, contention=False)
+
+    def tearDown(self):
+        from control.safety import default_governor
+        default_governor.configure(failsafe=self._orig_failsafe, contention=self._orig_contention)
+
     def test_condition_evaluation_primitives(self):
         executor = DAGExecutor()
         context = {

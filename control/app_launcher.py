@@ -219,7 +219,7 @@ def launch_application(name: str, args: Optional[str] = None, timeout: float = 3
             "window": {
                 "title": matched_win["title"],
                 "hwnd": matched_win["hwnd"],
-                "bounds": matched_win["bounds"],
+                "bounds": matched_win.get("bounds", [0, 0, 0, 0]),
             },
         }
 
