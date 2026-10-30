@@ -48,12 +48,15 @@ class ExplorerCOMConnector:
     @staticmethod
     def _run_ps_json(script: str) -> Any:
         """Executes a PowerShell script and returns parsed JSON output."""
+        wrapped = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n$OutputEncoding = [System.Text.Encoding]::UTF8\n{script}"
         try:
             res = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", wrapped],
                 capture_output=True,
                 text=True,
-                timeout=5.0,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10.0,
             )
             out = res.stdout.strip()
             if not out:
@@ -155,12 +158,15 @@ class ExcelCOMConnector:
 
     @staticmethod
     def _run_ps_json(script: str) -> Any:
+        wrapped = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n$OutputEncoding = [System.Text.Encoding]::UTF8\n{script}"
         try:
             res = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", wrapped],
                 capture_output=True,
                 text=True,
-                timeout=6.0,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10.0,
             )
             out = res.stdout.strip()
             if not out:

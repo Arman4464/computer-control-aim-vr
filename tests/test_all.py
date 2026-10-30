@@ -712,7 +712,10 @@ class TestMouseEngineUpgrades(unittest.TestCase):
     """Tests mouse hover, drag interpolation, and scroll."""
 
     def setUp(self):
-        default_governor.configure(failsafe=False)
+        default_governor.configure(failsafe=False, contention=False)
+
+    def tearDown(self):
+        default_governor.configure(failsafe=True, contention=True)
 
     def test_mouse_hover(self):
         if IS_HEADLESS:
@@ -774,7 +777,11 @@ class TestDAGExecutorSubsystem(unittest.TestCase):
 
     def setUp(self):
         from control.safety import default_governor
-        default_governor.configure(failsafe=False)
+        default_governor.configure(failsafe=False, contention=False)
+
+    def tearDown(self):
+        from control.safety import default_governor
+        default_governor.configure(failsafe=True, contention=True)
 
     def test_dag_topological_sort(self):
         from control.dag_executor import DAGExecutor
