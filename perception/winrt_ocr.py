@@ -2,6 +2,7 @@
 Native Windows WinRT OCR Engine (Local, Zero-Cost, 15ms Text Spotting).
 Communicates with a persistent Windows PowerShell daemon executing Windows.Media.Ocr.OcrEngine
 over stdio to spot text words and phrases with exact physical screen bounding boxes.
+Compatible with Windows 10 (1809+) and Windows 11.
 """
 
 import subprocess
@@ -13,6 +14,7 @@ import json
 import time
 import tempfile
 import uuid
+import re
 from typing import Optional, Dict, Any, List, Tuple
 from PIL import Image
 
@@ -33,6 +35,32 @@ class WinRtOcrEngine:
         self._initialized = False
         atexit.register(self.shutdown)
 
+    def _cleanup_proc(self):
+        """Safely cleans up daemon process and pipes without resource warnings."""
+        if self._proc is not None:
+            proc = self._proc
+            self._proc = None
+            self._initialized = False
+            try:
+                if proc.poll() is None:
+                    try:
+                        if proc.stdin and not proc.stdin.closed:
+                            proc.stdin.write("EXIT\n")
+                            proc.stdin.flush()
+                    except Exception:
+                        pass
+                    proc.terminate()
+                    proc.wait(timeout=1.0)
+            except Exception:
+                pass
+            finally:
+                for pipe in (proc.stdin, proc.stdout, proc.stderr):
+                    if pipe and not getattr(pipe, "closed", True):
+                        try:
+                            pipe.close()
+                        except Exception:
+                            pass
+
     def _ensure_daemon(self):
         """Starts or restarts the background PowerShell WinRT OCR worker."""
         if self._proc is not None and self._proc.poll() is None:
@@ -40,6 +68,8 @@ class WinRtOcrEngine:
 
         if not os.path.exists(self._daemon_path):
             raise FileNotFoundError(f"WinRT OCR daemon script not found at {self._daemon_path}")
+
+        self._cleanup_proc()
 
         try:
             self._proc = subprocess.Popen(
@@ -63,12 +93,13 @@ class WinRtOcrEngine:
             ready_line = self._proc.stdout.readline().strip()
             if ready_line != "READY":
                 err = self._proc.stderr.read()
+                self._cleanup_proc()
                 raise RuntimeError(f"OCR daemon failed to initialize: {ready_line} (stderr: {err})")
             self._initialized = True
             sys.stderr.write("[WinRtOCR] Native Windows OCR daemon initialized and ready.\n")
         except Exception as e:
             sys.stderr.write(f"[WinRtOCR] Failed to start OCR daemon: {e}\n")
-            self._proc = None
+            self._cleanup_proc()
             raise
 
     def recognize(self, img: Image.Image) -> Dict[str, Any]:
@@ -81,8 +112,7 @@ class WinRtOcrEngine:
             self._ensure_daemon()
 
             # Verify process is still alive before sending command
-            if self._proc.poll() is not None:
-                self._proc = None
+            if self._proc is None or self._proc.poll() is not None:
                 self._ensure_daemon()
 
             # Save frame to a unique temporary file to avoid collisions
@@ -94,10 +124,16 @@ class WinRtOcrEngine:
 
                 response_line = self._proc.stdout.readline()
                 if not response_line:
-                    self._proc = None
+                    self._cleanup_proc()
                     raise RuntimeError("OCR daemon closed stdout unexpectedly.")
 
-                data = json.loads(response_line.strip(), strict=False)
+                try:
+                    data = json.loads(response_line.strip(), strict=False)
+                except Exception:
+                    # Sanitize any raw control characters (except \t, \n, \r) if emitted by Windows 10 WinRT OCR
+                    cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', response_line.strip())
+                    data = json.loads(cleaned, strict=False)
+
                 if isinstance(data, dict):
                     words = data.get("words", [])
                     if isinstance(words, dict):
@@ -106,8 +142,8 @@ class WinRtOcrEngine:
                         data["words"] = []
                 return data
             except Exception:
-                # If communication fails, reset proc to restart on next attempt
-                self._proc = None
+                # If communication fails, clean up proc to restart on next attempt
+                self._cleanup_proc()
                 raise
             finally:
                 if os.path.exists(temp_path):
@@ -143,20 +179,19 @@ class WinRtOcrEngine:
                     "confidence": 1.0,
                 }
 
-        # 2. Substring in single word (e.g. "Download" in "Downloads")
+        # 2. Substring inside a single word
         for w in words:
-            word_clean = w["text"].strip().lower()
-            if query_norm in word_clean or (len(word_clean) >= 4 and word_clean in query_norm):
+            if query_norm in w["text"].strip().lower():
                 return {
                     "text": w["text"],
                     "bbox": [w["x"], w["y"], w["w"], w["h"]],
                     "center": [w["x"] + w["w"] // 2, w["y"] + w["h"] // 2],
-                    "confidence": 0.85,
+                    "confidence": 0.9,
                 }
 
-        # 3. Multi-word phrase search across sequential words on same line
+        # 3. Multi-word phrase search across contiguous word sequence
         query_tokens = query_norm.split()
-        if len(query_tokens) > 1:
+        if len(query_tokens) > 1 and len(words) >= len(query_tokens):
             for i in range(len(words) - len(query_tokens) + 1):
                 slice_words = words[i : i + len(query_tokens)]
                 slice_text = " ".join(sw["text"].strip().lower() for sw in slice_words)
@@ -179,17 +214,7 @@ class WinRtOcrEngine:
     def shutdown(self):
         """Cleanly terminates the OCR daemon process."""
         with self._lock:
-            if self._proc is not None:
-                try:
-                    if self._proc.poll() is None:
-                        self._proc.stdin.write("EXIT\n")
-                        self._proc.stdin.flush()
-                        self._proc.terminate()
-                        self._proc.wait(timeout=1.0)
-                except Exception:
-                    pass
-                finally:
-                    self._proc = None
+            self._cleanup_proc()
 
 
 default_ocr = WinRtOcrEngine()

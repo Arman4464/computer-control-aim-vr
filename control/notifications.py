@@ -2,6 +2,7 @@
 Native Windows Toast Notification Manager (AIM-VR 3.0 Control Subsystem).
 Provides native Windows Action Center toast notifications using Windows Runtime
 Windows.UI.Notifications.ToastNotificationManager with XML template payloads.
+Fully compatible across Windows 10 (1809+) and Windows 11.
 """
 
 import subprocess
@@ -51,7 +52,10 @@ def send_toast_notification(
     app_id_b64 = base64.b64encode(target_app_id.encode("utf-8")).decode("ascii")
 
     ps_code = f"""
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $OutputEncoding = [System.Text.Encoding]::UTF8
     try {{
+        Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue
         [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
         [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
 
@@ -75,7 +79,9 @@ def send_toast_notification(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_code],
             capture_output=True,
             text=True,
-            timeout=5.0
+            encoding="utf-8",
+            errors="replace",
+            timeout=8.0
         )
         if proc.returncode == 0 and "SUCCESS" in proc.stdout:
             return {
