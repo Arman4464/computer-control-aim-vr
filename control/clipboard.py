@@ -47,7 +47,7 @@ else:
     CF_UNICODETEXT = 13
 
 
-def _open_clipboard_with_retry(max_retries: int = 5, delay: float = 0.02) -> bool:
+def _open_clipboard_with_retry(max_retries: int = 15, delay: float = 0.02) -> bool:
     """Attempts to open clipboard with short retries to handle brief locks by other apps."""
     if not IS_WINDOWS:
         return True
@@ -74,27 +74,32 @@ class ClipboardManager:
                 return ""
 
         if not user32.IsClipboardFormatAvailable(CF_UNICODETEXT):
-            return ""
-
-        if not _open_clipboard_with_retry():
-            return ""
-
-        try:
-            h_data = user32.GetClipboardData(CF_UNICODETEXT)
-            if not h_data:
+            for _ in range(5):
+                time.sleep(0.01)
+                if user32.IsClipboardFormatAvailable(CF_UNICODETEXT):
+                    break
+            else:
                 return ""
 
-            p_data = kernel32.GlobalLock(h_data)
-            if not p_data:
+        for _ in range(5):
+            if not _open_clipboard_with_retry():
                 return ""
 
             try:
-                text = ctypes.wstring_at(p_data)
-                return text
+                h_data = user32.GetClipboardData(CF_UNICODETEXT)
+                if h_data:
+                    p_data = kernel32.GlobalLock(h_data)
+                    if p_data:
+                        try:
+                            text = ctypes.wstring_at(p_data)
+                            return text
+                        finally:
+                            kernel32.GlobalUnlock(h_data)
             finally:
-                kernel32.GlobalUnlock(h_data)
-        finally:
-            user32.CloseClipboard()
+                user32.CloseClipboard()
+            time.sleep(0.01)
+
+        return ""
 
     def set_text(self, text: str) -> bool:
         """Sets Unicode text onto the system clipboard."""

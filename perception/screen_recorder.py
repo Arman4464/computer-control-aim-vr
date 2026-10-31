@@ -37,6 +37,21 @@ else:
 get_current_cursor_pos = get_physical_cursor_pos
 
 
+def _is_nvidia_gpu() -> bool:
+    """Checks if system is running with active NVIDIA GPU."""
+    if os.environ.get("AIMVR_RECORDER_ENCODER") == "h264_nvenc":
+        return True
+    if os.path.exists("/dev/nvidia0") or os.path.exists("/proc/driver/nvidia"):
+        return True
+    try:
+        nv_bin = shutil.which("nvidia-smi")
+        if nv_bin and not nv_bin.lower().endswith(".exe"):
+            return True
+    except Exception:
+        pass
+    return False
+
+
 class ScreenRecorder:
     """
     Continuous screen recorder engine for autonomous agents.
@@ -95,7 +110,7 @@ class ScreenRecorder:
                     "frame_count": len(self.frames),
                 }
 
-            self.fps = max(1, min(60, int(fps)))
+            self.fps = max(1, min(120, int(fps)))
             self.target = target
             self.crop_region = crop_region
             self.max_dim = int(max_dim)
@@ -143,13 +158,24 @@ class ScreenRecorder:
                             cmd.extend(["-g", geo_str])
                         if not self.include_cursor:
                             cmd.append("--no-cursor")
+                        cmd.extend(["--max-fps", str(self.fps)])
+                        if _is_nvidia_gpu():
+                            cmd.extend(["--encoder", "h264_nvenc"])
                         cmd.append("--low-power=off")
                     elif hw_tool == "wf-recorder":
                         cmd.extend(["-f", tmp_video])
                         if geo_str:
                             cmd.extend(["-g", geo_str])
-                        if not self.include_cursor:
-                            cmd.append("-c")
+                        cmd.extend(["-r", str(self.fps)])
+                        if _is_nvidia_gpu():
+                            cmd.extend(["-c", "h264_nvenc"])
+                        else:
+                            codec = os.environ.get("AIMVR_RECORDER_CODEC", "h264_vaapi")
+                            dri_device = os.environ.get("LIBVA_DRIVER_DEVICE", "/dev/dri/renderD128")
+                            if codec == "h264_vaapi":
+                                cmd.extend(["-c", codec, "-d", dri_device])
+                            else:
+                                cmd.extend(["-c", codec])
 
                     self._hardware_proc = subprocess.Popen(
                         cmd,

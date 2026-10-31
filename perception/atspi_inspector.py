@@ -66,16 +66,39 @@ INTERACTIVE_ROLES = {
 }
 
 
+
+# Regex matching Unicode Private Use Area (PUA) characters:
+# BMP PUA: U+E000 - U+F8FF
+# Supplementary PUA-A: U+F0000 - U+FFFFD
+# Supplementary PUA-B: U+100000 - U+10FFFD
+# Total PUA range: 0xE000–0xF8FF and 0xF0000–0x10FFFF
+_PUA_REGEX = re.compile(r"[\uE000-\uF8FF\U000F0000-\U0010FFFF]")
+
+
+def _clean_text(text: str) -> str:
+    """
+    Strips Unicode Private Use Area (PUA) glyphs (e.g. icon fonts from FontAwesome,
+    NerdFonts, MaterialIcons) from text, preventing raw icon font noise in trees.
+    """
+    if not text:
+        return ""
+    cleaned = _PUA_REGEX.sub("", text)
+    return " ".join(cleaned.split())
+
+
 def clean_atspi_role(raw_role: str) -> str:
     """Normalizes raw AT-SPI2 role names into compact unified roles."""
     clean = raw_role.lower().strip()
     return ATSPI_ROLE_MAP.get(clean, clean.capitalize().replace("-", " "))
 
 
+
 class ATSPIInspector:
     """
     FreeDesktop AT-SPI2 Accessibility Inspector querying org.a11y.atspi over D-Bus.
     """
+
+    _clean_text = staticmethod(_clean_text)
 
     def __init__(self, bus_address: Optional[str] = None):
         self._bus_address = bus_address
@@ -156,23 +179,31 @@ class ATSPIInspector:
         {
             "count": int,
             "has_rich_uia": bool,
+            "formatted_text": str,
             "formatted_tree": str,
             "elements": [ {name, role, id, bbox, center, enabled}, ... ]
         }
         """
         if self._mock_tree is not None:
-            return self._filter_tree(self._mock_tree, target=target, max_depth=max_depth, max_elements=max_elements)
-
-        if not self.is_available():
+            res = self._filter_tree(self._mock_tree, target=target, max_depth=max_depth, max_elements=max_elements)
+        elif not self.is_available():
             # Fall back to Hyprland Window Manager active window + OCR
-            return self._fallback_window_tree(target=target)
+            res = self._fallback_window_tree(target=target)
+        else:
+            # Query live AT-SPI2 bus
+            raw_elements = self._query_atspi_elements(target=target, max_depth=max_depth, max_elements=max_elements)
+            if not raw_elements:
+                res = self._fallback_window_tree(target=target)
+            else:
+                res = self._format_elements_to_tree(raw_elements, target=target)
 
-        # Query live AT-SPI2 bus
-        raw_elements = self._query_atspi_elements(target=target, max_depth=max_depth, max_elements=max_elements)
-        if not raw_elements:
-            return self._fallback_window_tree(target=target)
+        # Ensure both formatted_tree and formatted_text keys are present
+        if "formatted_tree" in res and "formatted_text" not in res:
+            res["formatted_text"] = res["formatted_tree"]
+        elif "formatted_text" in res and "formatted_tree" not in res:
+            res["formatted_tree"] = res["formatted_text"]
 
-        return self._format_elements_to_tree(raw_elements, target=target)
+        return res
 
     def _fallback_window_tree(self, target: Optional[str] = None) -> Dict[str, Any]:
         """Generates semantic tree from Hyprland IPC window list when AT-SPI2 is absent."""
@@ -192,9 +223,11 @@ class ATSPIInspector:
         lines = []
         elements = []
         for win in windows[:10]:
-            title = win.get("title", "")
-            w_class = win.get("class", "")
-            b = win.get("bounds", [0, 0, 800, 600])
+            title = _clean_text(win.get("title", ""))
+            w_class = _clean_text(win.get("class", ""))
+            b = win.get("bounds") or [0, 0, 800, 600]
+            if len(b) < 4 or any(v is None for v in b):
+                b = [0, 0, 800, 600]
             cx = b[0] + b[2] // 2
             cy = b[1] + b[3] // 2
             line = f'Window: "{title}" class="{w_class}" @ {b}'
@@ -212,6 +245,7 @@ class ATSPIInspector:
         return {
             "count": len(elements),
             "has_rich_uia": len(elements) > 0,
+            "formatted_text": formatted,
             "formatted_tree": formatted,
             "elements": elements,
         }
@@ -245,7 +279,8 @@ class ATSPIInspector:
                     elem = self._query_single_accessible(bus_addr, "org.a11y.atspi.Registry", path)
                     if elem:
                         if target:
-                            if target.lower() not in elem["name"].lower() and target.lower() not in elem["role"].lower():
+                            w_title = (elem.get("window") or elem.get("app") or "").lower()
+                            if w_title and target.lower().strip() not in w_title:
                                 continue
                         elements.append(elem)
         except Exception:
@@ -272,7 +307,7 @@ class ATSPIInspector:
             if name_res.returncode == 0 and 's "' in name_res.stdout:
                 m = re.search(r's "([^"]+)"', name_res.stdout)
                 if m:
-                    name = m.group(1)
+                    name = _clean_text(m.group(1))
 
             # 3. Component.GetExtents (coord_type=0 screen)
             ext_cmd = ["busctl", f"--address={bus_addr}", "call", service, path, "org.a11y.atspi.Component", "GetExtents", "u", "0"]
@@ -308,8 +343,13 @@ class ATSPIInspector:
         """Filters an injected or cached accessibility tree."""
         elements = tree.get("elements", [])
         if target:
-            t_low = target.lower()
-            elements = [e for e in elements if t_low in e.get("name", "").lower() or t_low in e.get("role", "").lower()]
+            t_low = target.lower().strip()
+            has_win_meta = any("window" in e or "app" in e for e in elements)
+            if has_win_meta:
+                elements = [
+                    e for e in elements
+                    if t_low in (e.get("window") or "").lower() or t_low in (e.get("app") or "").lower()
+                ]
 
         limited = elements[:max_elements]
         return self._format_elements_to_tree(limited, target=target)
@@ -318,26 +358,37 @@ class ATSPIInspector:
         """Formats normalized elements into hierarchical text tree."""
         lines = []
         if target:
-            lines.append(f'Window: "{target}"')
+            lines.append(f'Window: "{_clean_text(target)}"')
         else:
             lines.append('Window: "Desktop Root"')
 
+        cleaned_elements = []
         for elem in elements:
-            role = elem.get("role", "Control")
-            name = elem.get("name", "")
-            elem_id = elem.get("id", "")
-            bbox = elem.get("bbox", [0, 0, 0, 0])
+            elem_copy = dict(elem)
+            role = clean_atspi_role(elem_copy.get("role", "Control"))
+            name = _clean_text(elem_copy.get("name", ""))
+            elem_id = elem_copy.get("id", "")
+            bbox = elem_copy.get("bbox") or [0, 0, 0, 0]
+            if len(bbox) < 4 or any(v is None for v in bbox):
+                bbox = [0, 0, 0, 0]
+
+            elem_copy["name"] = name
+            elem_copy["role"] = role
+            elem_copy["bbox"] = bbox
+            cleaned_elements.append(elem_copy)
 
             name_str = f' "{name}"' if name else ""
             id_str = f' id="{elem_id}"' if elem_id and not elem_id.startswith("/") else ""
             line = f'  [{role}]{name_str}{id_str} @ {bbox}'
             lines.append(line)
 
+        tree_text = "\n".join(lines)
         return {
-            "count": len(elements),
-            "has_rich_uia": len(elements) > 0,
-            "formatted_tree": "\n".join(lines),
-            "elements": elements,
+            "count": len(cleaned_elements),
+            "has_rich_uia": len(cleaned_elements) > 0,
+            "formatted_text": tree_text,
+            "formatted_tree": tree_text,
+            "elements": cleaned_elements,
         }
 
     def find_element(
@@ -355,7 +406,14 @@ class ATSPIInspector:
         if not elements:
             return None
 
-        q_lower = query.lower().strip()
+        if not query or not query.strip():
+            return None
+
+        q_cleaned = _clean_text(query).lower()
+        q_lower = q_cleaned if q_cleaned else query.lower().strip()
+        if not q_lower:
+            return None
+
         role_lower = role.lower().strip() if role else None
 
         # 1. Exact name match + exact role match
@@ -376,6 +434,40 @@ class ATSPIInspector:
                 return elem
 
         return None
+
+    def find_element_at_point(
+        self,
+        x: int,
+        y: int,
+        target: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Locates the most specific accessible element containing point (x, y).
+        Returns conforming dict: {name, role, id, bbox, bounding_box, center, enabled}.
+        """
+        tree_res = self.inspect_tree(target=target, max_elements=100)
+        elements = tree_res.get("elements", [])
+        if not elements:
+            return None
+
+        candidates = []
+        for elem in elements:
+            b = elem.get("bbox") or [0, 0, 0, 0]
+            if len(b) >= 4:
+                ex, ey, ew, eh = b[0], b[1], b[2], b[3]
+                if ex <= x <= ex + ew and ey <= y <= ey + eh:
+                    area = ew * eh
+                    candidates.append((area, elem))
+
+        if not candidates:
+            return None
+
+        # Sort by area ascending so the smallest enclosing child is selected
+        candidates.sort(key=lambda c: c[0])
+        best = dict(candidates[0][1])
+        if "bbox" in best and "bounding_box" not in best:
+            best["bounding_box"] = best["bbox"]
+        return best
 
 
 # Default singleton instance

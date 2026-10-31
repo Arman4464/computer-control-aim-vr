@@ -21,6 +21,7 @@ from control.safety import (
     FailsafeException,
     UserContentionException,
     ensure_interactive_desktop,
+    IS_WINDOWS,
 )
 from control.mouse_engine import (
     default_mouse,
@@ -50,7 +51,10 @@ from perception.uia_inspector import (
     set_element_value,
 )
 from perception.visual_som import default_som
-from perception.winrt_ocr import default_ocr
+if IS_WINDOWS:
+    from perception.winrt_ocr import default_ocr
+else:
+    from control.platform.hyprland.linux_ocr import default_linux_ocr as default_ocr
 from perception.element_locator import default_locator
 from control.visual_servoing import default_servoing
 from control.virtual_desktop import default_virtual_desktop
@@ -1327,9 +1331,9 @@ class MCPServer:
             max_elements = int(args.get("max_elements", 50))
             tree = inspect_window(target=target, max_depth=max_depth, max_elements=max_elements)
             summary = {
-                "count": tree["count"],
-                "has_rich_uia": tree["has_rich_uia"],
-                "formatted_tree": tree["formatted_text"],
+                "count": tree.get("count", 0),
+                "has_rich_uia": tree.get("has_rich_uia", False),
+                "formatted_tree": tree.get("formatted_tree") or tree.get("formatted_text", ""),
             }
             return [{"type": "text", "text": json.dumps(summary, indent=2)}], False
 
@@ -1654,32 +1658,62 @@ class MCPServer:
 
             if win_info and win_info.get("hwnd"):
                 img = capture_window(win_info["hwnd"])
-                offset_x, offset_y = win_info["bounds"][0], win_info["bounds"][1]
+                b = win_info.get("bounds") or [0, 0, 0, 0]
+                if len(b) < 2 or any(v is None for v in b[:2]):
+                    b = [0, 0, 0, 0]
+                offset_x, offset_y = b[0], b[1]
             else:
                 img = capture_screen()
                 vx, vy, _, _ = get_virtual_screen_bounds()
                 offset_x, offset_y = vx, vy
 
+            active_ocr = default_ocr
+            if not IS_WINDOWS:
+                try:
+                    from control.platform.hyprland.linux_ocr import default_linux_ocr
+                    active_ocr = default_linux_ocr
+                except ImportError:
+                    pass
+
             if query:
-                match = default_ocr.find_text(img, query)
+                match = active_ocr.find_text(img, query)
                 if not match:
                     return [{"type": "text", "text": f"Text query '{query}' not found via OCR."}], True
+                m_bbox = match.get("bbox") or [0, 0, 0, 0]
+                if len(m_bbox) < 4 or any(v is None for v in m_bbox):
+                    m_bbox = [0, 0, 0, 0]
+                m_center = match.get("center") or [m_bbox[0] + m_bbox[2] // 2, m_bbox[1] + m_bbox[3] // 2]
+                off_x = offset_x or 0
+                off_y = offset_y or 0
                 res = {
                     "query": query,
-                    "matched_text": match["text"],
-                    "center": [offset_x + match["center"][0], offset_y + match["center"][1]],
-                    "bbox": [offset_x + match["bbox"][0], offset_y + match["bbox"][1], match["bbox"][2], match["bbox"][3]],
-                    "confidence": match["confidence"],
+                    "matched_text": match.get("text", query),
+                    "center": [off_x + (m_center[0] or 0), off_y + (m_center[1] or 0)],
+                    "bbox": [off_x + (m_bbox[0] or 0), off_y + (m_bbox[1] or 0), m_bbox[2] or 0, m_bbox[3] or 0],
+                    "confidence": match.get("confidence", 1.0),
                 }
                 return [{"type": "text", "text": json.dumps(res, indent=2)}], False
             else:
-                ocr_data = default_ocr.recognize(img)
+                ocr_data = active_ocr.recognize(img)
                 words_abs = []
+                off_x = offset_x or 0
+                off_y = offset_y or 0
                 for w in ocr_data.get("words", []):
+                    w_bbox = w.get("bbox") or [0, 0, 0, 0]
+                    if len(w_bbox) < 4 or any(v is None for v in w_bbox):
+                        w_bbox = [0, 0, 0, 0]
+                    wx = w.get("x") if w.get("x") is not None else w_bbox[0]
+                    wy = w.get("y") if w.get("y") is not None else w_bbox[1]
+                    ww = w.get("w") if w.get("w") is not None else w_bbox[2]
+                    wh = w.get("h") if w.get("h") is not None else w_bbox[3]
+                    wx = wx or 0
+                    wy = wy or 0
+                    ww = ww or 0
+                    wh = wh or 0
                     words_abs.append({
-                        "text": w["text"],
-                        "bbox": [offset_x + w["x"], offset_y + w["y"], w["w"], w["h"]],
-                        "center": [offset_x + w["x"] + w["w"] // 2, offset_y + w["y"] + w["h"] // 2],
+                        "text": w.get("text", ""),
+                        "bbox": [off_x + wx, off_y + wy, ww, wh],
+                        "center": [off_x + wx + ww // 2, off_y + wy + wh // 2],
                     })
                 res = {
                     "text": ocr_data.get("text", ""),

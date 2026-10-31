@@ -238,19 +238,27 @@ class UInputEngine(BaseInputEngine):
     Linux /dev/uinput Driver with Wayland/Hyprland dispatch fallbacks.
     """
 
-    def __init__(self, ipc: Optional[HyprlandIPC] = None):
+    def __init__(
+        self,
+        ipc: Optional[HyprlandIPC] = None,
+        wm: Optional[Any] = None,
+        virtual_pointer: Optional[Any] = None,
+    ):
         self.ipc = ipc or default_hyprland_ipc
+        self.wm = wm
         self._uinput_device = None
         self._has_evdev = False
         self._uinput_initialized = False
         self._cursor_x = 0
         self._cursor_y = 0
-        self._virtual_pointer = None
-        try:
-            from control.platform.hyprland.wayland_virtual_pointer import default_virtual_pointer
-            self._virtual_pointer = default_virtual_pointer
-        except Exception:
-            self._virtual_pointer = None
+        if virtual_pointer is not None:
+            self._virtual_pointer = virtual_pointer
+        else:
+            try:
+                from control.platform.hyprland.wayland_virtual_pointer import default_virtual_pointer
+                self._virtual_pointer = default_virtual_pointer
+            except Exception:
+                self._virtual_pointer = None
         self._init_uinput()
 
     def _init_uinput(self):
@@ -288,6 +296,38 @@ class UInputEngine(BaseInputEngine):
         except Exception as e:
             sys.stderr.write(f"[UInputEngine] evdev /dev/uinput initialization failed: {e}\n")
 
+    def _get_desktop_bounds(self) -> Tuple[int, int]:
+        """Queries dynamic desktop bounds from window manager, defaulting to 1920x1080."""
+        vw, vh = 1920, 1080
+        wm = getattr(self, "wm", None)
+        if wm is None:
+            try:
+                from control.platform import get_platform_driver
+                driver = get_platform_driver()
+                wm = getattr(driver, "window_manager", None)
+            except Exception:
+                pass
+
+        if wm is not None:
+            try:
+                bounds = None
+                if hasattr(wm, "get_virtual_desktop_bounds"):
+                    bounds = wm.get_virtual_desktop_bounds()
+                elif hasattr(wm, "get_virtual_screen_bounds"):
+                    bounds = wm.get_virtual_screen_bounds()
+                if bounds:
+                    if len(bounds) >= 4 and bounds[2] > 0 and bounds[3] > 0:
+                        vw, vh = int(bounds[2]), int(bounds[3])
+                    elif len(bounds) >= 2 and bounds[0] > 0 and bounds[1] > 0:
+                        vw, vh = int(bounds[0]), int(bounds[1])
+            except Exception:
+                pass
+        if vw <= 0:
+            vw = 1920
+        if vh <= 0:
+            vh = 1080
+        return vw, vh
+
     def _get_button_code(self, button: str) -> int:
         btn = button.lower().strip()
         if btn == "right":
@@ -319,10 +359,12 @@ class UInputEngine(BaseInputEngine):
         except Exception:
             pass
 
+        vw, vh = self._get_desktop_bounds()
+
         # SOTA Wayland Protocol Fallback: zwlr_virtual_pointer_v1
         if self._virtual_pointer and self._virtual_pointer.is_available():
             try:
-                self._virtual_pointer.move_absolute(self._cursor_x, self._cursor_y)
+                self._virtual_pointer.move_absolute(self._cursor_x, self._cursor_y, x_extent=vw, y_extent=vh)
                 return self._cursor_x, self._cursor_y
             except Exception:
                 pass
@@ -338,6 +380,26 @@ class UInputEngine(BaseInputEngine):
                 pass
 
         return self._cursor_x, self._cursor_y
+
+    def move(self, x: int, y: int) -> Tuple[int, int]:
+        """
+        Moves cursor to absolute coordinates (x, y).
+        Queries dynamic desktop bounds from window manager and passes them to
+        _virtual_pointer.move_absolute(x, y, x_extent=vw, y_extent=vh).
+        """
+        self._cursor_x = int(x)
+        self._cursor_y = int(y)
+
+        vw, vh = self._get_desktop_bounds()
+
+        if self._virtual_pointer and self._virtual_pointer.is_available():
+            try:
+                self._virtual_pointer.move_absolute(self._cursor_x, self._cursor_y, x_extent=vw, y_extent=vh)
+                return self._cursor_x, self._cursor_y
+            except Exception:
+                pass
+
+        return self.move_cursor(x, y)
 
     def get_position(self) -> Tuple[int, int]:
         """
@@ -495,25 +557,73 @@ class UInputEngine(BaseInputEngine):
         clean = key.lower().strip()
         code = LINUX_KEY_MAP.get(clean)
         if code and self._uinput_device:
-            self._uinput_device.write(EV_KEY, code, 1)
-            self._uinput_device.syn()
-            return
+            try:
+                self._uinput_device.write(EV_KEY, code, 1)
+                self._uinput_device.syn()
+                return
+            except Exception:
+                pass
 
         # Fallback: ydotool key <code:1>
         if code and shutil.which("ydotool"):
-            subprocess.run(["ydotool", "key", f"{code}:1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                res = subprocess.run(["ydotool", "key", f"{code}:1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                if res.returncode == 0:
+                    return
+            except Exception:
+                pass
+
+        # Rootless Fallback 1: wtype -k <key>
+        if shutil.which("wtype"):
+            try:
+                res = subprocess.run(["wtype", "-k", clean], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2.0)
+                if res.returncode == 0:
+                    return
+            except Exception:
+                pass
+
+        # Rootless Fallback 2: Hyprland IPC dispatch sendshortcut
+        if self.ipc:
+            try:
+                self.ipc.dispatch("sendshortcut", f", {clean}")
+            except Exception:
+                pass
 
     def key_up(self, key: str) -> None:
         clean = key.lower().strip()
         code = LINUX_KEY_MAP.get(clean)
         if code and self._uinput_device:
-            self._uinput_device.write(EV_KEY, code, 0)
-            self._uinput_device.syn()
-            return
+            try:
+                self._uinput_device.write(EV_KEY, code, 0)
+                self._uinput_device.syn()
+                return
+            except Exception:
+                pass
 
         # Fallback: ydotool key <code:0>
         if code and shutil.which("ydotool"):
-            subprocess.run(["ydotool", "key", f"{code}:0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                res = subprocess.run(["ydotool", "key", f"{code}:0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                if res.returncode == 0:
+                    return
+            except Exception:
+                pass
+
+        # Rootless Fallback 1: wtype -k <key>
+        if shutil.which("wtype"):
+            try:
+                res = subprocess.run(["wtype", "-k", clean], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2.0)
+                if res.returncode == 0:
+                    return
+            except Exception:
+                pass
+
+        # Rootless Fallback 2: Hyprland IPC dispatch sendshortcut
+        if self.ipc:
+            try:
+                self.ipc.dispatch("sendshortcut", f", {clean}")
+            except Exception:
+                pass
 
     def press_key(self, key: str) -> None:
         self.key_down(key)
@@ -533,6 +643,13 @@ class UInputEngine(BaseInputEngine):
             self.key_up(k)
             time.sleep(0.01)
 
+    def write_text(self, text: str, interval: float = 0.01) -> None:
+        """
+        Types unicode string with rootless fallbacks.
+        If /dev/uinput is unavailable and ydotool fails, falls back to wtype "<text>" or Hyprland IPC sendshortcut.
+        """
+        return self.type_text(text, interval=interval)
+
     def type_text(self, text: str, interval: float = 0.01) -> None:
         """
         Types text using:
@@ -540,6 +657,7 @@ class UInputEngine(BaseInputEngine):
         2. ydotool type (if ydotool daemon is running).
         3. wl-copy + Ctrl+V clipboard paste fallback.
         4. uinput scancodes for standard ASCII chars.
+        5. Hyprland IPC dispatch sendshortcut.
         """
         if not text:
             return
@@ -589,3 +707,14 @@ class UInputEngine(BaseInputEngine):
                     self.press_key("enter")
                 if interval > 0:
                     time.sleep(interval)
+            return
+
+        # Method 5: Hyprland IPC dispatch sendshortcut fallback
+        if self.ipc:
+            try:
+                for ch in text:
+                    self.ipc.dispatch("sendshortcut", f", {ch}")
+                    if interval > 0:
+                        time.sleep(interval)
+            except Exception:
+                pass

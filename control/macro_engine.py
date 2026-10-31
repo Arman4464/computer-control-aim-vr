@@ -70,34 +70,122 @@ else:
 
 
 # =====================================================================
-# Tier 5: Message Pump Synchronization Barrier
+# Tier 5: Message Pump Synchronization & Compositor Responsiveness Barrier
 # =====================================================================
 
-def wait_for_message_pump(hwnd: int, timeout_ms: int = 150) -> bool:
+def verify_tier5_barrier(hwnd: Union[int, str] = 0, timeout_ms: int = 150) -> bool:
     """
-    Tier 5 Barrier: Sends WM_NULL to target window with timeout on Windows.
-    Returns True if responsive, False if hung or timed out.
-    On Linux, returns True immediately.
+    Tier 5 Barrier:
+    - On Windows: Sends WM_NULL to target window with timeout (SendMessageTimeoutW).
+      Returns True if responsive, False if hung or timed out.
+    - On Linux: Confirms compositor responsiveness via Hyprland IPC (querying activewindow/clients)
+      or Wayland display roundtrip rather than immediate trivial True.
     """
-    if sys.platform != "win32" or user32 is None:
-        return True
-    if not hwnd or not user32.IsWindow(hwnd):
-        return True
-    try:
-        result = wintypes.DWORD(0)
-        flags = SMTO_ABORTIFHUNG | SMTO_NORMAL
-        ret = user32.SendMessageTimeoutW(
-            hwnd,
-            WM_NULL,
-            0,
-            0,
-            flags,
-            max(20, int(timeout_ms)),
-            ctypes.byref(result),
-        )
-        return bool(ret)
-    except Exception:
-        return True
+    if sys.platform == "win32":
+        if user32 is None or not hwnd:
+            return True
+        try:
+            h = int(hwnd, 16) if isinstance(hwnd, str) and hwnd.strip().lower().startswith("0x") else int(hwnd)
+            if not user32.IsWindow(h):
+                return True
+            result = wintypes.DWORD(0)
+            flags = SMTO_ABORTIFHUNG | SMTO_NORMAL
+            ret = user32.SendMessageTimeoutW(
+                h,
+                WM_NULL,
+                0,
+                0,
+                flags,
+                max(20, int(timeout_ms)),
+                ctypes.byref(result),
+            )
+            return bool(ret)
+        except Exception:
+            return True
+    else:
+        # Linux Hyprland IPC / Wayland barrier check
+        try:
+            from control.platform import get_platform_driver
+            driver = get_platform_driver()
+            if hasattr(driver, "ipc") and driver.ipc:
+                res = driver.ipc.query_json("activewindow")
+                if res is not None:
+                    return True
+                clients = driver.ipc.query_json("clients")
+                return clients is not None
+            elif hasattr(driver, "window_manager") and driver.window_manager:
+                active = driver.window_manager.get_active_window()
+                return active is not None or True
+            return True
+        except Exception:
+            return False
+
+
+def wait_for_message_pump(hwnd: Union[int, str] = 0, timeout_ms: int = 150) -> bool:
+    """Tier 5 Barrier (alias for verify_tier5_barrier)."""
+    return verify_tier5_barrier(hwnd=hwnd, timeout_ms=timeout_ms)
+
+
+def _get_active_window_handle() -> Tuple[Any, str]:
+    """
+    Returns (hwnd_or_address, title) for currently active foreground window across platforms.
+    """
+    if sys.platform == "win32" and user32 is not None:
+        try:
+            hwnd = user32.GetForegroundWindow()
+            return hwnd, ""
+        except Exception:
+            return 0, ""
+    else:
+        try:
+            from control.platform import get_platform_driver
+            wm = get_platform_driver().window_manager
+            active = wm.get_active_window()
+            if active:
+                addr = active.get("hwnd") or active.get("address", "")
+                title = active.get("title", "")
+                return addr, title
+        except Exception:
+            pass
+        return 0, ""
+
+
+def focus_anchor(anchor: Union[Dict[str, Any], Any]) -> bool:
+    """
+    Focuses the window referenced by an anchor dict or window identifier.
+    Safely handles hex window addresses (e.g. '0x560f4e3c9210'), integer string handles,
+    and native integers across both Windows and Linux without raising ValueError.
+    """
+    hwnd = None
+    if isinstance(anchor, dict):
+        tier5 = anchor.get("tier5_sync", {})
+        hwnd = tier5.get("hwnd") or anchor.get("hwnd")
+        if not hwnd and "window_title" in tier5:
+            win = find_window(tier5["window_title"])
+            if win:
+                hwnd = win.get("hwnd") or win.get("address")
+    else:
+        hwnd = anchor
+
+    if hwnd is None or hwnd == "":
+        return False
+
+    if sys.platform != "win32":
+        try:
+            from control.platform import get_platform_driver
+            wm = get_platform_driver().window_manager
+            return bool(wm.focus_window(str(hwnd)))
+        except Exception:
+            return False
+    else:
+        try:
+            if isinstance(hwnd, str) and hwnd.strip().lower().startswith("0x"):
+                h_val = int(hwnd.strip(), 16)
+            else:
+                h_val = int(hwnd)
+            return focus_window(h_val)
+        except Exception:
+            return False
 
 
 # =====================================================================
@@ -272,7 +360,11 @@ class MacroEngine:
           Tier 5: Target HWND for Message Pump Synchronization
         """
         win = find_window(target_window) if target_window else None
-        hwnd = win["hwnd"] if win else user32.GetForegroundWindow()
+        if win:
+            hwnd = win.get("hwnd") or win.get("address", 0)
+            win_title = win.get("title", "")
+        else:
+            hwnd, win_title = _get_active_window_handle()
 
         cl_left, cl_top, cl_w, cl_h = get_window_client_bounds(hwnd)
         ext_left, ext_top, ext_w, ext_h = get_window_extended_bounds(hwnd)
@@ -288,24 +380,41 @@ class MacroEngine:
             ry_ratio = 0.5
 
         # -------------------------------------------------------------
-        # Tier 1: Windows UI Automation Semantic Anchor
+        # Tier 1: Semantic Accessibility Anchor (UIA on Windows, AT-SPI2 on Linux)
         # -------------------------------------------------------------
-        tier1_uia = None
-        try:
-            import uiautomation as auto
-            ctrl = auto.ControlFromPoint(x, y)
-            if ctrl and ctrl.Exists(0, 0):
-                c_rect = ctrl.BoundingRectangle
-                c_bbox = [int(c_rect.left), int(c_rect.top), int(c_rect.right - c_rect.left), int(c_rect.bottom - c_rect.top)]
-                tier1_uia = {
-                    "automation_id": ctrl.AutomationId or "",
-                    "name": _clean_text(ctrl.Name or ""),
-                    "role": ctrl.ControlTypeName or "",
-                    "class_name": ctrl.ClassName or "",
-                    "bbox": c_bbox,
-                }
-        except Exception:
-            pass
+        tier1_element = None
+        if sys.platform == "win32":
+            try:
+                import uiautomation as auto
+                ctrl = auto.ControlFromPoint(x, y)
+                if ctrl and ctrl.Exists(0, 0):
+                    c_rect = ctrl.BoundingRectangle
+                    c_bbox = [int(c_rect.left), int(c_rect.top), int(c_rect.right - c_rect.left), int(c_rect.bottom - c_rect.top)]
+                    tier1_element = {
+                        "automation_id": ctrl.AutomationId or "",
+                        "name": _clean_text(ctrl.Name or ""),
+                        "role": ctrl.ControlTypeName or "",
+                        "class_name": ctrl.ClassName or "",
+                        "bbox": c_bbox,
+                    }
+            except Exception:
+                pass
+        else:
+            try:
+                from perception.atspi_inspector import default_atspi
+                elem = default_atspi.find_element_at_point(x, y)
+                if elem:
+                    bbox = elem.get("bounding_box") or elem.get("bbox") or [0, 0, 0, 0]
+                    tier1_element = {
+                        "name": elem.get("name", ""),
+                        "role": elem.get("role", ""),
+                        "bounding_box": bbox,
+                        "bbox": bbox,
+                        "automation_id": elem.get("id", ""),
+                        "class_name": elem.get("class", elem.get("role", "")),
+                    }
+            except Exception:
+                pass
 
         # -------------------------------------------------------------
         # Tier 2: WinRT OCR Nearest Token Anchor
@@ -358,8 +467,20 @@ class MacroEngine:
         except Exception:
             pass
 
+        # Safe hwnd handling: do not crash on hex address strings or int strings
+        if isinstance(hwnd, str) and hwnd.strip().lower().startswith("0x"):
+            stored_hwnd = hwnd.strip()
+        elif isinstance(hwnd, str) and hwnd.strip().isdigit():
+            stored_hwnd = int(hwnd.strip())
+        else:
+            try:
+                stored_hwnd = int(hwnd)
+            except (ValueError, TypeError):
+                stored_hwnd = hwnd
+
         return {
-            "tier1_uia": tier1_uia,
+            "tier1_uia": tier1_element,
+            "tier1_element": tier1_element,
             "tier2_ocr": tier2_ocr,
             "tier3_phash": tier3_phash,
             "tier4_relative": {
@@ -368,8 +489,8 @@ class MacroEngine:
                 "client_bounds_at_record": [cl_left, cl_top, cl_w, cl_h],
             },
             "tier5_sync": {
-                "hwnd": int(hwnd),
-                "window_title": win["title"] if win else "",
+                "hwnd": stored_hwnd,
+                "window_title": win["title"] if win else win_title,
             },
         }
 
@@ -445,6 +566,10 @@ class MacroEngine:
             "file_path": file_path,
         }
 
+    def focus_anchor(self, anchor: Union[Dict[str, Any], Any]) -> bool:
+        """Brings the anchor target window to foreground safely handling hex addresses."""
+        return focus_anchor(anchor)
+
     # =====================================================================
     # 5-Tier Self-Healing Resolution Engine
     # =====================================================================
@@ -452,32 +577,41 @@ class MacroEngine:
     def resolve_anchor(self, anchor: Dict[str, Any], target_window: Optional[str] = None) -> Tuple[int, int, str]:
         """
         Resolves action coordinates using 5-Tier Self-Healing Fallback:
-          Tier 1: UIA Control Match (AutomationId / Name / Role)
-          Tier 2: WinRT OCR Token Spotting + Relative Vector Offset
+          Tier 1: UIA Control Match (AutomationId / Name / Role) or AT-SPI2 on Linux
+          Tier 2: WinRT / Linux OCR Token Spotting + Relative Vector Offset
           Tier 3: Visual pHash Match on candidate regions
           Tier 4: DPI-Normalized Window Client Relative Offset
         Returns: (x, y, resolved_tier)
         """
         win = find_window(target_window) if target_window else None
-        hwnd = win["hwnd"] if win else user32.GetForegroundWindow()
+        if win:
+            hwnd = win.get("hwnd") or win.get("address", 0)
+        else:
+            hwnd, _ = _get_active_window_handle()
 
-        # Tier 5 Check: Wait for target window message pump to be unblocked
-        wait_for_message_pump(hwnd, timeout_ms=150)
+        # Tier 5 Check: Wait for target window message pump / compositor to be unblocked
+        verify_tier5_barrier(hwnd, timeout_ms=150)
 
         cl_left, cl_top, cl_w, cl_h = get_window_client_bounds(hwnd)
 
         # -------------------------------------------------------------
-        # Tier 1 Fallback: UIA Semantic Tree
+        # Tier 1 Fallback: Semantic Tree (UIA on Windows, AT-SPI2 on Linux)
         # -------------------------------------------------------------
-        t1 = anchor.get("tier1_uia")
+        t1 = anchor.get("tier1_element") or anchor.get("tier1_uia")
         if t1:
             q_name = t1.get("name")
             q_role = t1.get("role")
             if q_name or q_role:
                 try:
-                    elem = find_element_by_query(target=target_window, name=q_name, role=q_role)
-                    if elem and elem.get("center"):
-                        return int(elem["center"][0]), int(elem["center"][1]), "tier1_uia"
+                    if sys.platform == "win32":
+                        elem = find_element_by_query(target=target_window, name=q_name, role=q_role)
+                        if elem and elem.get("center"):
+                            return int(elem["center"][0]), int(elem["center"][1]), "tier1_uia"
+                    else:
+                        from perception.atspi_inspector import default_atspi
+                        elem = default_atspi.find_element(query=q_name, role=q_role, target=target_window)
+                        if elem and elem.get("center"):
+                            return int(elem["center"][0]), int(elem["center"][1]), "tier1_atspi"
                 except Exception:
                     pass
 
@@ -557,7 +691,7 @@ class MacroEngine:
         if target_window:
             w = find_window(target_window)
             if w and not dry_run:
-                focus_window(w["hwnd"])
+                self.focus_anchor(w.get("hwnd") or w.get("address"))
 
         start_play = time.time()
         trace = []

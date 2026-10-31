@@ -6,6 +6,7 @@ resolves Linux desktop application binaries, and opens URLs/documents via xdg-op
 
 import os
 import sys
+import time
 import shutil
 import subprocess
 from typing import Optional, Dict, Any, List
@@ -47,8 +48,19 @@ class LinuxAppLauncher(BaseAppLauncher):
     Arch Linux Hyprland Application Launcher.
     """
 
-    def __init__(self, ipc: Optional[HyprlandIPC] = None):
+    def __init__(self, ipc: Optional[HyprlandIPC] = None, window_manager: Optional[Any] = None):
         self.ipc = ipc or default_hyprland_ipc
+        self._window_manager = window_manager
+
+    def _get_window_manager(self):
+        if self._window_manager is not None:
+            return self._window_manager
+        try:
+            from control.platform import get_platform_driver
+            driver = get_platform_driver()
+            return getattr(driver, "window_manager", None)
+        except Exception:
+            return None
 
     def resolve_binary(self, name: str) -> Optional[str]:
         """Resolves application name or alias to executable on system PATH."""
@@ -80,51 +92,115 @@ class LinuxAppLauncher(BaseAppLauncher):
 
         return None
 
-    def launch_app(self, name: str, args: Optional[str] = None) -> Dict[str, Any]:
+    def launch_app(self, name: str, args: Optional[str] = None, timeout: float = 3.5) -> Dict[str, Any]:
         """
-        Launches application using Hyprland 'exec' dispatcher or subprocess.Popen.
+        Launches application using Hyprland 'exec' dispatcher or subprocess.Popen,
+        then polls up to timeout (default 3.5s) for the top-level application window
+        to appear to prevent race conditions in fast subsequent DAG actions.
         """
         bin_path = self.resolve_binary(name)
         cmd_str = bin_path if bin_path else name
         if args:
             cmd_str += f" {args}"
 
+        method = None
+        pid = None
+
         # 1. Primary: hyprctl dispatch exec <command>
         try:
             resp = self.ipc.dispatch("exec", cmd_str)
             if "ok" in resp.lower() or resp == "":
-                return {
-                    "status": "launched",
-                    "app": name,
-                    "command": cmd_str,
-                    "method": "hyprland_exec",
-                }
+                method = "hyprland_exec"
         except Exception as e:
             sys.stderr.write(f"[LinuxAppLauncher] hyprland exec failed: {e}. Falling back to Popen.\n")
 
         # 2. Fallback: subprocess.Popen
-        try:
-            full_cmd = [bin_path or name]
-            if args:
-                full_cmd.extend(args.split())
-            proc = subprocess.Popen(
-                full_cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-            return {
-                "status": "launched",
-                "app": name,
-                "pid": proc.pid,
-                "command": cmd_str,
-                "method": "subprocess",
+        if method is None:
+            try:
+                full_cmd = [bin_path or name]
+                if args:
+                    full_cmd.extend(args.split())
+                proc = subprocess.Popen(
+                    full_cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                method = "subprocess"
+                pid = proc.pid
+            except Exception as e:
+                return {
+                    "status": "error",
+                    "message": f"Failed to launch application '{name}': {str(e)}",
+                }
+
+        # 3. Window readiness polling (up to timeout, matching Windows launch_application)
+        matched_win = None
+        search_term = name.lower().strip()
+        start_time = time.time()
+        wm = self._get_window_manager()
+
+        while time.time() - start_time < timeout:
+            time.sleep(0.15)
+            if wm:
+                try:
+                    # Check window list
+                    windows = wm.list_windows()
+                    for w in windows:
+                        t = (w.get("title") or "").lower()
+                        c = (w.get("class") or "").lower()
+                        ic = (w.get("initial_class") or "").lower()
+                        if search_term in t or search_term in c or search_term in ic:
+                            matched_win = w
+                            break
+                        if pid and w.get("pid") == pid:
+                            matched_win = w
+                            break
+                    if matched_win:
+                        break
+
+                    # Check active window
+                    active = wm.get_active_window()
+                    if active:
+                        t = (active.get("title") or "").lower()
+                        c = (active.get("class") or "").lower()
+                        if search_term in t or search_term in c:
+                            matched_win = active
+                            break
+                        if pid and active.get("pid") == pid:
+                            matched_win = active
+                            break
+                except Exception:
+                    pass
+            if matched_win:
+                break
+
+        res: Dict[str, Any] = {
+            "status": "launched",
+            "app": name,
+            "name": name,
+            "command": cmd_str,
+            "method": method,
+        }
+        if pid:
+            res["pid"] = pid
+
+        if matched_win:
+            try:
+                if wm:
+                    wm.focus_window(matched_win.get("hwnd") or matched_win.get("address"))
+            except Exception:
+                pass
+            res["window"] = {
+                "title": matched_win.get("title", ""),
+                "hwnd": matched_win.get("hwnd") or matched_win.get("address", ""),
+                "address": matched_win.get("address", ""),
+                "bounds": matched_win.get("bounds", [0, 0, 0, 0]),
             }
-        except Exception as e:
-            return {
-                "status": "error",
-                "message": f"Failed to launch application '{name}': {str(e)}",
-            }
+        else:
+            res["note"] = f"Process started; window did not register within {timeout}s or runs without GUI window."
+
+        return res
 
     def open_file_or_url(self, target: str) -> Dict[str, Any]:
         """

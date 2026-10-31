@@ -11,7 +11,7 @@ import json
 from typing import Dict, Any, List, Optional, Tuple, Union, Callable
 from PIL import Image
 
-from control.safety import default_governor, ensure_interactive_desktop, FailsafeException, UserContentionException
+from control.safety import default_governor, ensure_interactive_desktop, FailsafeException, UserContentionException, IS_WINDOWS
 from control.visual_servoing import default_servoing, VisualServoing
 from control.mouse_engine import default_mouse
 from control.keyboard_engine import default_keyboard
@@ -287,14 +287,17 @@ class DAGExecutor:
 
         elif cond_type == "text_exists":
             from perception.screen_capture import find_window, capture_window, capture_screen
-            from perception.winrt_ocr import default_ocr
+            if IS_WINDOWS:
+                from perception.winrt_ocr import default_ocr
+            else:
+                from control.platform.hyprland.linux_ocr import default_linux_ocr as default_ocr
             query = resolve_templates(condition.get("query"), context)
             target = resolve_templates(condition.get("target"), context)
             img = None
             if target:
                 win = find_window(str(target))
                 if win:
-                    img = capture_window(win["hwnd"])
+                    img = capture_window(win.get("hwnd") or win.get("address"))
             if img is None:
                 img = capture_screen()
             match = default_ocr.find_text(img, str(query)) if (img and query) else None

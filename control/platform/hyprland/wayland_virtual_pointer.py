@@ -162,6 +162,18 @@ class WaylandVirtualPointerClient:
         self._pointer_id = 0
         self._manager_id = 0
 
+    def destroy(self):
+        """
+        Sends protocol destroy request (opcode 8) to virtual pointer and disconnects socket.
+        """
+        if self._sock and self._pointer_id:
+            try:
+                # opcode 8 = destroy()
+                self._send_message(self._pointer_id, 8, b"")
+            except Exception:
+                pass
+        self.disconnect()
+
     def _send_message(self, obj_id: int, opcode: int, payload: bytes = b""):
         """Sends a framed Wayland wire protocol packet (8-byte header + payload)."""
         if not self._sock:
@@ -214,13 +226,51 @@ class WaylandVirtualPointerClient:
 
         return globals_found
 
-    def move_absolute(self, x: int, y: int, x_extent: int = 1920, y_extent: int = 1080):
+    def move_absolute(
+        self,
+        x: int,
+        y: int,
+        x_extent: Optional[int] = None,
+        y_extent: Optional[int] = None,
+    ):
         """
         Moves virtual pointer to absolute screen coordinates using motion_absolute.
         Dispatches motion_absolute followed immediately by frame().
+        If extents are not passed or None, dynamically queries active desktop bounds via
+        get_platform_driver().window_manager.get_virtual_desktop_bounds() (fallback to 1920x1080).
         """
         if not self.is_available():
             raise RuntimeError("Wayland Virtual Pointer is not connected.")
+
+        if x_extent is None or y_extent is None:
+            try:
+                from control.platform import get_platform_driver
+                driver = get_platform_driver()
+                wm = getattr(driver, "window_manager", None)
+                bounds = None
+                if wm is not None:
+                    if hasattr(wm, "get_virtual_desktop_bounds"):
+                        bounds = wm.get_virtual_desktop_bounds()
+                    elif hasattr(wm, "get_virtual_screen_bounds"):
+                        bounds = wm.get_virtual_screen_bounds()
+                if bounds:
+                    if len(bounds) >= 4 and bounds[2] > 0 and bounds[3] > 0:
+                        w, h = bounds[2], bounds[3]
+                    elif len(bounds) >= 2 and bounds[0] > 0 and bounds[1] > 0:
+                        w, h = bounds[0], bounds[1]
+                    else:
+                        w, h = 1920, 1080
+                    if x_extent is None:
+                        x_extent = int(w)
+                    if y_extent is None:
+                        y_extent = int(h)
+            except Exception:
+                pass
+
+        if not x_extent or x_extent <= 0:
+            x_extent = 1920
+        if not y_extent or y_extent <= 0:
+            y_extent = 1080
 
         self._cursor_x = int(x)
         self._cursor_y = int(y)
@@ -230,12 +280,31 @@ class WaylandVirtualPointerClient:
         payload = struct.pack(
             "<IIIII",
             t_ms,
-            int(x),
-            int(y),
+            max(0, int(x)),
+            max(0, int(y)),
             max(1, int(x_extent)),
             max(1, int(y_extent)),
         )
         self._send_message(self._pointer_id, 7, payload)
+        self.frame()
+
+    def motion(self, dx: int, dy: int, time_ms: int = 0):
+        """
+        Sends relative pointer motion event (opcode 0) followed by frame() (opcode 3).
+        Coordinates dx and dy are 24.8 fixed-point numbers.
+        """
+        if not self.is_available():
+            raise RuntimeError("Wayland Virtual Pointer is not connected.")
+
+        t_ms = int(time_ms) if time_ms > 0 else self._get_time_ms()
+        dx_fixed = int(dx * 256.0)
+        dy_fixed = int(dy * 256.0)
+
+        # opcode 0 = motion(time: uint32, dx: fixed, dy: fixed)
+        payload = struct.pack("<Iii", t_ms, dx_fixed, dy_fixed)
+        self._send_message(self._pointer_id, 0, payload)
+        self._cursor_x += int(dx)
+        self._cursor_y += int(dy)
         self.frame()
 
     def button_down(self, button: int = BTN_LEFT):

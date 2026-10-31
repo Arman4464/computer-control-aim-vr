@@ -188,7 +188,72 @@ Capture smooth video walkthroughs with hardware acceleration:
 
 ---
 
-### Recipe D: Hybrid Semantic Macro Engine Workflows (`macro_record`, `macro_play`)
+### Recipe D: In-Engine Condition Waiting (`wait_for`)
+Eliminate LLM polling turns and token burn by letting the local engine poll for UI state readiness:
+
+```json
+// Wait up to 5.0 seconds for 'Build succeeded' text to appear on screen:
+{"name": "wait_for", "arguments": {
+  "condition": "text_exists",
+  "query": "Build succeeded",
+  "timeout": 5.0,
+  "interval": 0.25
+}}
+
+// Wait for a modal or app window to open:
+{"name": "wait_for", "arguments": {
+  "condition": "window_exists",
+  "target": "Confirm Save",
+  "timeout": 3.0
+}}
+```
+
+---
+
+### Recipe E: Desktop Notifications & Workspace State Cleanup
+Alert the user with native FreeDesktop notifications and cleanly restore active workspace:
+
+```json
+// 1. Send desktop notification via notify-send:
+{"name": "notify", "arguments": {
+  "title": "AIM-VR Automated Task",
+  "message": "Deployment completed successfully. All services active.",
+  "app_id": "aim-vr"
+}}
+
+// 2. Return user to workspace 1 ('Leave No Trace'):
+{"name": "manage_window", "arguments": {
+  "action": "workspace",
+  "workspace": "1"
+}}
+```
+
+---
+
+### Recipe F: Programmatic Tier 0 Direct Operations (IPC, MPRIS, Clipboard)
+Bypass the visual pipeline completely with zero visual tokens and zero vision latency:
+
+```json
+// 1. Instant Wayland clipboard injection (wl-copy + atomic paste):
+{"name": "clipboard", "arguments": {
+  "action": "paste",
+  "text": "export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t $XDG_RUNTIME_DIR/hypr | head -n 1)"
+}}
+
+// 2. Control background media playback via playerctl / MPRIS:
+{"name": "control_media", "arguments": {
+  "action": "play_pause"
+}}
+
+// 3. Safe targeted window termination (immune to killing active focus):
+{"name": "close_window", "arguments": {
+  "target": "Calculator"
+}}
+```
+
+---
+
+### Recipe G: 5-Tier Self-Healing Macro Engine Workflows (`macro_record`, `macro_play`)
 Record repetitive UI workflows with 5-tier semantic anchors:
 
 ```json

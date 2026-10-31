@@ -31,7 +31,8 @@ from perception.screen_capture import (
     get_virtual_screen_bounds,
     window_to_screen_coords,
 )
-if sys.platform == "win32":
+IS_WINDOWS = sys.platform == "win32"
+if IS_WINDOWS:
     from perception.winrt_ocr import default_ocr
 else:
     from control.platform.hyprland.linux_ocr import default_linux_ocr as default_ocr
@@ -92,6 +93,11 @@ class MarkResult(dict):
 
 def calculate_iou(box_a: Union[Tuple[int, int, int, int], List[int]], box_b: Union[Tuple[int, int, int, int], List[int]]) -> float:
     """Calculates Intersection over Union (IoU) between two bounding boxes [x, y, w, h]."""
+    if not box_a or not box_b or len(box_a) < 4 or len(box_b) < 4:
+        return 0.0
+    if any(v is None for v in box_a) or any(v is None for v in box_b):
+        return 0.0
+
     xa1, ya1, wa, ha = box_a
     xb1, yb1, wb, hb = box_b
     xa2, ya2 = xa1 + wa, ya1 + ha
@@ -117,6 +123,11 @@ _calculate_iou = calculate_iou
 
 def calculate_containment(inner: Union[Tuple[int, int, int, int], List[int]], outer: Union[Tuple[int, int, int, int], List[int]]) -> float:
     """Returns the fraction of inner box [x, y, w, h] contained inside outer box."""
+    if not inner or not outer or len(inner) < 4 or len(outer) < 4:
+        return 0.0
+    if any(v is None for v in inner) or any(v is None for v in outer):
+        return 0.0
+
     x1, y1, w1, h1 = inner
     x2, y2, w2, h2 = outer
 
@@ -148,19 +159,33 @@ def apply_non_maximum_suppression(
         return []
 
     def get_priority(elem: Dict[str, Any]) -> int:
-        role = (elem.get("role") or elem.get("type") or "").lower()
-        src = elem.get("source", "uia")
-        if any(r in role for r in ["button", "menuitem", "tabitem", "edit", "checkbox", "radiobutton"]):
+        src = elem.get("source", "")
+        if src in ("uia", "atspi"):
             return 3
         if src == "ocr":
             return 2
+        if src in ("cv", "icon_detector"):
+            return 1
+        role = (elem.get("role") or elem.get("type") or "").lower()
+        if "graphic" in role:
+            return 1
+        if any(r in role for r in ["button", "menuitem", "tabitem", "edit", "checkbox", "radiobutton", "semantic_atspi"]):
+            if src and src not in ("uia", "atspi"):
+                return 1
+            return 3
         return 1
+
+    def _safe_area(e: Dict[str, Any]) -> int:
+        b = e.get("bbox") or [0, 0, 0, 0]
+        if len(b) < 4 or any(v is None for v in b):
+            return 0
+        return max(0, b[2]) * max(0, b[3])
 
     sorted_elems = sorted(
         elements,
         key=lambda e: (
             get_priority(e),
-            -(e.get("bbox", [0, 0, 0, 0])[2] * e.get("bbox", [0, 0, 0, 0])[3]),
+            -_safe_area(e),
         ),
         reverse=True,
     )
@@ -168,22 +193,25 @@ def apply_non_maximum_suppression(
     kept: List[Dict[str, Any]] = []
 
     for candidate in sorted_elems:
-        bbox_c = tuple(candidate.get("bbox", [0, 0, 0, 0]))
-        if bbox_c[2] <= 4 or bbox_c[3] <= 4:
+        bbox_c = candidate.get("bbox") or [0, 0, 0, 0]
+        if len(bbox_c) < 4 or any(v is None for v in bbox_c) or bbox_c[2] <= 4 or bbox_c[3] <= 4:
             continue
 
         discard = False
         for existing in kept:
-            bbox_e = tuple(existing.get("bbox", [0, 0, 0, 0]))
+            bbox_e = existing.get("bbox") or [0, 0, 0, 0]
+            if len(bbox_e) < 4 or any(v is None for v in bbox_e):
+                continue
+
             iou = calculate_iou(bbox_c, bbox_e)
             if iou > iou_threshold:
                 discard = True
                 break
 
-            ios = calculate_containment(bbox_c, bbox_e)
+            ios = calculate_containment(bbox_e, bbox_c)
             area_c = bbox_c[2] * bbox_c[3]
             role_c = (candidate.get("role") or candidate.get("type") or "").lower()
-            if ios > ios_threshold and any(r in role_c for r in ["pane", "group", "window", "client"]) and area_c > 100000:
+            if ios >= 0.8 and any(r in role_c for r in ["pane", "group", "window", "client"]) and area_c > 100000:
                 discard = True
                 break
 
@@ -284,7 +312,37 @@ class SoMEngine:
             return None
 
     def extract_uia_candidates(self, target_window: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Extracts actionable interactive elements using Windows UI Automation."""
+        """Extracts actionable interactive elements using Windows UI Automation or Linux AT-SPI2."""
+        if not IS_WINDOWS:
+            try:
+                from perception.atspi_inspector import default_atspi
+                tree = default_atspi.inspect_tree(target=target_window, max_elements=150)
+                raw_elements = tree.get("elements", []) if isinstance(tree, dict) else []
+                candidates = []
+                for elem in raw_elements:
+                    try:
+                        bbox = elem.get("bbox") or [0, 0, 0, 0]
+                        if len(bbox) < 4 or any(v is None for v in bbox) or bbox[2] <= 0 or bbox[3] <= 0:
+                            continue
+                        center = elem.get("center")
+                        if not center or len(center) < 2 or any(v is None for v in center):
+                            center = [bbox[0] + bbox[2] // 2, bbox[1] + bbox[3] // 2]
+                        candidates.append({
+                            "bbox": bbox,
+                            "center": center,
+                            "type": "semantic_atspi",
+                            "role": elem.get("role", "semantic_atspi"),
+                            "text": (elem.get("name") or "").strip(),
+                            "name": (elem.get("name") or "").strip(),
+                            "id": elem.get("id", ""),
+                            "source": "atspi",
+                        })
+                    except Exception:
+                        continue
+                return candidates
+            except Exception:
+                return []
+
         candidates = []
         try:
             import uiautomation as auto
@@ -452,7 +510,7 @@ class SoMEngine:
         def priority_score(c):
             src = c.get("source", "")
             has_txt = bool(c.get("text") or c.get("name"))
-            if src == "uia":
+            if src in ("uia", "atspi"):
                 return 3 if has_txt else 2
             elif src == "ocr":
                 return 2
@@ -462,11 +520,15 @@ class SoMEngine:
         fused: List[Dict[str, Any]] = []
 
         for cand in sorted_cands:
-            box = cand["bbox"]
+            box = cand.get("bbox") or [0, 0, 0, 0]
+            if len(box) < 4 or any(v is None for v in box) or box[2] <= 4 or box[3] <= 4:
+                continue
             matched = False
 
             for existing in fused:
-                e_box = existing["bbox"]
+                e_box = existing.get("bbox") or [0, 0, 0, 0]
+                if len(e_box) < 4 or any(v is None for v in e_box):
+                    continue
                 if calculate_iou(box, e_box) >= iou_threshold:
                     matched = True
                     if not existing.get("text") and cand.get("text"):
@@ -474,7 +536,7 @@ class SoMEngine:
                         existing["name"] = cand.get("name", cand["text"])
                     break
 
-                if cand["source"] == "ocr" and calculate_containment(box, e_box) >= 0.70:
+                if cand.get("source") == "ocr" and calculate_containment(box, e_box) >= 0.70:
                     matched = True
                     cur_txt = existing.get("text", "")
                     cand_txt = cand.get("text", "")
@@ -492,7 +554,15 @@ class SoMEngine:
                 if len(fused) >= max_elements:
                     break
 
-        fused.sort(key=lambda item: (item["bbox"][1] // 30, item["bbox"][0]))
+        def _sort_fused_key(item):
+            b = item.get("bbox") or [0, 0, 0, 0]
+            if len(b) < 4 or any(v is None for v in b):
+                return (0, 0)
+            y = b[1] if b[1] is not None else 0
+            x = b[0] if b[0] is not None else 0
+            return (y // 30, x)
+
+        fused.sort(key=_sort_fused_key)
         return fused
 
     def find_dense_cluster(
@@ -511,7 +581,10 @@ class SoMEngine:
         grid_counts: Dict[Tuple[int, int], List[Dict[str, Any]]] = {}
 
         for elem in elements:
-            bx, by, bw, bh = elem.get("bbox", [0, 0, 0, 0])
+            b = elem.get("bbox") or [0, 0, 0, 0]
+            if len(b) < 4 or any(v is None for v in b):
+                continue
+            bx, by, bw, bh = b
             cx, cy = bx + bw // 2, by + bh // 2
             gx = min(grid_cols - 1, max(0, cx // cell_w))
             gy = min(grid_rows - 1, max(0, cy // cell_h))
@@ -525,10 +598,14 @@ class SoMEngine:
         if len(dense_elems) < 3:
             return None
 
-        min_x = min(e["bbox"][0] for e in dense_elems)
-        min_y = min(e["bbox"][1] for e in dense_elems)
-        max_x = max(e["bbox"][0] + e["bbox"][2] for e in dense_elems)
-        max_y = max(e["bbox"][1] + e["bbox"][3] for e in dense_elems)
+        def _elem_b(e):
+            b = e.get("bbox") or [0, 0, 0, 0]
+            return b if len(b) >= 4 and not any(v is None for v in b) else [0, 0, 0, 0]
+
+        min_x = min(_elem_b(e)[0] for e in dense_elems)
+        min_y = min(_elem_b(e)[1] for e in dense_elems)
+        max_x = max(_elem_b(e)[0] + _elem_b(e)[2] for e in dense_elems)
+        max_y = max(_elem_b(e)[1] + _elem_b(e)[3] for e in dense_elems)
 
         crop_x = max(0, min_x - cluster_pad)
         crop_y = max(0, min_y - cluster_pad)
@@ -563,16 +640,23 @@ class SoMEngine:
         except Exception:
             font = ImageFont.load_default()
 
-        sorted_elements = sorted(
-            elements,
-            key=lambda e: (
-                e.get("bbox", [0, 0, 0, 0])[1] // 25,
-                e.get("bbox", [0, 0, 0, 0])[0],
-            ),
-        )
+        def _sort_elem_key(e):
+            b = e.get("bbox") or [0, 0, 0, 0]
+            if len(b) < 4 or any(v is None for v in b):
+                return (0, 0)
+            y = b[1] if b[1] is not None else 0
+            x = b[0] if b[0] is not None else 0
+            return (y // 25, x)
+
+        sorted_elements = sorted(elements, key=_sort_elem_key)
 
         for idx, elem in enumerate(sorted_elements, start=1):
-            abs_x, abs_y, w, h = elem["bbox"]
+            bbox = elem.get("bbox") or [0, 0, 0, 0]
+            if len(bbox) < 4 or any(v is None for v in bbox):
+                continue
+            abs_x, abs_y, w, h = bbox
+            if w <= 0 or h <= 0:
+                continue
             rel_x = abs_x - origin_x
             rel_y = abs_y - origin_y
 
