@@ -1,16 +1,16 @@
 ---
 name: computer-control
 description: >-
-  Direct OS-level desktop automation and computer control for Windows (AIM-VR 3.0).
+  Direct OS-level desktop automation and computer control for Windows and Arch Linux Hyprland (AIM-VR 3.0).
   Use whenever the user asks to control the computer, interact with desktop applications
-  (Notepad, File Explorer, Chrome, Brave, terminals, settings, or desktop software), inspect the screen,
+  (terminals, editors, browsers, settings, or desktop software), inspect the screen,
   launch/close applications safely, snap windows, manage clipboard, control media playback, click UI elements,
   type/paste text, press keyboard shortcuts, or automate multi-step workflows.
 ---
 
-# Windows Computer Control & Interaction Engine (AIM-VR 3.0)
+# Computer Control & Interaction Engine (AIM-VR 3.0)
 
-Industrial-grade, multi-tier desktop automation and perception subsystem for Windows. Designed specifically for AI agents to achieve **sub-30ms execution, zero hallucination, and massive token savings** over traditional screenshot-and-think computer-use loops.
+Industrial-grade, multi-tier desktop automation and perception subsystem for Windows and Arch Linux (Hyprland / Wayland). Designed specifically for AI agents to achieve **sub-30ms execution, zero hallucination, and massive token savings** over traditional screenshot-and-think computer-use loops.
 
 ---
 

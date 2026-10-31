@@ -1,15 +1,30 @@
-# Windows Computer Control (AIM-VR 3.0)
+# Computer Control (AIM-VR 3.0)
 
-[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue.svg)](https://microsoft.com)
-[![Python](https://img.shields.io/badge/Python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11%20%7C%20Arch%20Linux%20Hyprland-blue.svg)](https://archlinux.org)
+[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![MCP Version](https://img.shields.io/badge/MCP-2024--11--05-green.svg)](https://modelcontextprotocol.io/)
 [![Tools](https://img.shields.io/badge/MCP%20Tools-41%20Tools-blueviolet.svg)](mcp_schemas/)
-[![Tests](https://img.shields.io/badge/Tests-80%2F80%20Passing%20(100%25)-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-Passing%20(100%25)-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Autonomous In-Memory Vision Runner (AIM-VR 3.0)** is an industrial-grade desktop automation, macro recording, and computer control engine engineered specifically for LLMs and AI agents operating on Windows 10 and 11.
+**Autonomous In-Memory Vision Runner (AIM-VR 3.0)** is an industrial-grade desktop automation, macro recording, and computer control engine engineered for LLMs and AI agents operating natively on **Windows 10/11** and **Arch Linux with Hyprland (Wayland)**.
 
-Unlike standard vision-agent frameworks that suffer from sluggish multi-turn screenshot round-trips, coordinate misalignment, and desktop contention, AIM-VR 3.0 delivers **sub-30ms closed-loop execution**, **sub-15ms local native WinRT OCR**, **zero-token COM connectors**, **isolated Picture-in-Picture (PiP) sandboxing**, **continuous 15 FPS screen recording**, **a 5-tier self-healing Semantic Macro Engine**, and **speculative Action DAG orchestration**.
+Unlike standard vision-agent frameworks that suffer from sluggish multi-turn screenshot round-trips, coordinate misalignment, and desktop contention, AIM-VR 3.0 delivers **sub-30ms closed-loop execution**, **hardware-level kernel `/dev/uinput` and Win32 input injection**, **sub-15ms local native OCR**, **zero-disk-write Grim and GDI screencopy pipelines**, **a 5-tier self-healing Semantic Macro Engine**, and **speculative Action DAG orchestration**.
+
+---
+
+## Supported Operating Systems & Compositors
+
+| Feature | Windows 10 & 11 | Arch Linux (Hyprland / Wayland) |
+| :--- | :--- | :--- |
+| **Input Engine** | Win32 `SendInput` (hardware scan-codes & unicode) | Linux `/dev/uinput` kernel virtual device, `wtype`, `ydotool` |
+| **Compositor / Window IPC** | Win32 User32 / DWM / VirtualDesktop COM | Direct Hyprland UNIX domain socket (`.socket.sock` & `.socket2.sock`) |
+| **Screen Capture** | Win32 GDI `BitBlt` / `PrintWindow` | Pipe-streamed `grim` (`wlr-screencopy-unstable-v1`) direct to RAM |
+| **Workspaces / Desktops** | Windows COM `IVirtualDesktopManager` | Hyprland dynamic workspaces (`dispatch workspace / movetoworkspace`) |
+| **Clipboard** | Win32 `OpenClipboard` / `CF_UNICODETEXT` | Native `wl-clipboard` (`wl-copy` / `wl-paste` text & PNG) |
+| **Notifications** | WinRT Action Center Toast XML | FreeDesktop D-Bus / `notify-send` |
+| **App Execution** | Win32 `ShellExecuteExW` & App Paths Registry | Hyprland session `dispatch exec` & `xdg-open` |
+| **Audio & Media** | Win32 multimedia virtual key dispatch | PipeWire `wpctl`, PulseAudio `pactl`, multimedia keys |
 
 ---
 
@@ -235,12 +250,33 @@ python cli.py dag '[{"id": "open", "action": "launch_app", "name": "notepad"}, {
 
 ## Installation & Setup
 
-### Prerequisites
-- **Operating System**: Windows 10 (1809+) or Windows 11 (64-bit recommended).
-- **Python**: 3.9 or higher.
-- **PowerShell**: Built-in Windows PowerShell 5.1 or PowerShell 7+ (used for native WinRT OCR and COM bridging).
+### Arch Linux (Hyprland / Wayland)
 
-### Quickstart
+1. **Install system dependencies via `pacman`**:
+   ```bash
+   sudo pacman -S --needed hyprland grim slurp wl-clipboard libinput tesseract python-pillow
+   ```
+
+2. **Configure `/dev/uinput` permissions (for hardware-level mouse/keyboard)**:
+   ```bash
+   sudo cp assets/99-aimvr-uinput.rules /etc/udev/rules.d/
+   sudo udevadm control --reload-rules && sudo udevadm trigger
+   sudo usermod -aG input $USER
+   ```
+   *(Note: `ydotool` and `wtype` are automatically detected and used as zero-setup fallbacks).*
+
+3. **Install the package using `PKGBUILD`**:
+   ```bash
+   makepkg -si
+   ```
+   Or install via pip in editable mode:
+   ```bash
+   pip install -e .
+   ```
+
+---
+
+### Windows 10 & 11
 
 1. **Clone the repository**:
    ```powershell
