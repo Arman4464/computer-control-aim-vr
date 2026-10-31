@@ -192,6 +192,9 @@ class BaseAppLauncher(ABC):
         """Opens file or URL via default system handler."""
         pass
 
+    # Common alias
+    launch = launch_app
+
 
 class BaseSafety(ABC):
     """Abstract interface for platform-specific safety checks."""
@@ -234,6 +237,10 @@ class BasePlatformDriver(ABC):
     @property
     def app_launcher(self) -> BaseAppLauncher:
         """Alias for launcher subsystem."""
+        return self.launcher
+
+    def get_app_launcher(self) -> BaseAppLauncher:
+        """Accessor for launcher subsystem."""
         return self.launcher
 
     def get_platform_name(self) -> str:

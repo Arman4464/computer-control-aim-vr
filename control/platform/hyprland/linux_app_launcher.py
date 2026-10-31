@@ -142,6 +142,15 @@ class LinuxAppLauncher(BaseAppLauncher):
             except Exception as e:
                 return {"status": "error", "message": f"xdg-open error for '{target}': {str(e)}"}
 
+        if target.startswith(("http://", "https://")):
+            browser = self.resolve_binary("browser")
+            if browser:
+                try:
+                    subprocess.Popen([browser, target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                    return {"status": "opened", "target": target, "method": f"browser_fallback:{browser}"}
+                except Exception:
+                    pass
+
         return {"status": "error", "message": "xdg-open not available on system."}
 
     # Backward-compatible alias

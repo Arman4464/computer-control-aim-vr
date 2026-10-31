@@ -190,6 +190,12 @@ class HyprlandWindowManager(BaseWindowManager):
         if not win:
             return False
         addr = win["address"]
+        ws_id = win.get("workspace", {}).get("id")
+        if ws_id and ws_id > 0:
+            active_ws = self.ipc.get_active_workspace()
+            if active_ws.get("id") != ws_id:
+                self.ipc.dispatch("workspace", str(ws_id))
+                time.sleep(0.02)
         resp = self.ipc.dispatch("focuswindow", f"address:{addr}")
         return "ok" in resp.lower() or resp == ""
 

@@ -250,7 +250,7 @@ Record human or agent interactions with 5-tier semantic anchors, compress trajec
 
 ```json
 // 1. Start recording a macro:
-{"name": "macro_record", "arguments": {"action": "start", "macro_name": "daily_report_prep"}}
+{"name": "macro_record", "arguments": {"action": "start", "name": "daily_report_prep"}}
 
 // ... (user or agent executes steps across applications) ...
 
@@ -258,7 +258,7 @@ Record human or agent interactions with 5-tier semantic anchors, compress trajec
 {"name": "macro_record", "arguments": {"action": "stop"}}
 
 // 3. Replay macro at 1.5x speed with 5-tier self-healing fallback:
-{"name": "macro_play", "arguments": {"macro_name": "daily_report_prep", "speed": 1.5, "self_healing": true}}
+{"name": "macro_play", "arguments": {"name": "daily_report_prep", "speed_multiplier": 1.5, "self_heal": true}}
 
 // 4. List saved macros:
 {"name": "macro_manage", "arguments": {"action": "list"}}

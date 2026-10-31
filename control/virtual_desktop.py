@@ -304,7 +304,7 @@ class VirtualDesktopManager:
         if not IS_WINDOWS:
             from control.platform import get_platform_driver
             driver = get_platform_driver()
-            return driver.get_app_launcher().launch(command_line)
+            return driver.launcher.launch_app(command_line)
 
         self.ensure_sandbox()
 

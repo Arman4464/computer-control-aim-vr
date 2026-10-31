@@ -150,7 +150,7 @@ class HyprlandIPC:
         try:
             return json.loads(raw)
         except json.JSONDecodeError as exc:
-            if "cursorpos" in query and "at:" in raw:
+            if "cursorpos" in query and "," in raw:
                 try:
                     clean = raw.replace("at:", "").strip()
                     px, py = clean.split(",", 1)
