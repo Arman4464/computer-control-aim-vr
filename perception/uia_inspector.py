@@ -233,6 +233,10 @@ def inspect_window(
     Public API: Runs inspect_window inside run_in_interactive_desktop to ensure
     100% desktop handle attachment without UIPI or ERROR_BUSY failures.
     """
+    if not IS_WINDOWS:
+        from perception.atspi_inspector import default_atspi
+        return default_atspi.inspect_tree(target=target, max_depth=max_depth, max_elements=max_elements)
+
     win_info = find_window(target) if target else None
     return run_in_interactive_desktop(_inspect_window_core, target, max_depth, max_elements, win_info)
 
@@ -247,6 +251,13 @@ def find_element_by_query(
     Fast direct-lookup search for a specific UI element in the tree and returns its coordinates.
     Runs inside run_in_interactive_desktop for zero-guesswork precision in <0.2s.
     """
+    if not IS_WINDOWS:
+        from perception.atspi_inspector import default_atspi
+        query_term = name or automation_id or ""
+        if query_term:
+            elem = default_atspi.find_element(query=query_term, role=role, target=target)
+            if elem:
+                return elem
     # Fast bypass for Chromium / web browsers:
     # Browsers render DOM elements on GPU canvas without exposing UIA nodes unless specialized flags are set.
     # Bypassing UIA immediately routes element queries to sub-15ms WinRT OCR without tree-walk lag.

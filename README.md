@@ -17,7 +17,9 @@ Unlike standard vision-agent frameworks that suffer from sluggish multi-turn scr
 
 | Feature | Windows 10 & 11 | Arch Linux (Hyprland / Wayland) |
 | :--- | :--- | :--- |
-| **Input Engine** | Win32 `SendInput` (hardware scan-codes & unicode) | Linux `/dev/uinput` kernel virtual device, `wtype`, `ydotool` |
+| **Input Engine** | Win32 `SendInput` (hardware scan-codes & unicode) | Wayland `zwlr_virtual_pointer_v1` (unprivileged zero-root wire protocol), `/dev/uinput`, `ydotool` |
+| **Accessibility Tree** | Native Windows UI Automation (UIA) | FreeDesktop AT-SPI2 D-Bus (`org.a11y.atspi`) semantic tree inspector |
+| **Screen Recording** | Continuous 15-30 FPS WebP/GIF thread worker | Hardware-accelerated 60 FPS PipeWire DMA-BUF portal (`wl-screenrec` / `wf-recorder` VA-API / NVENC) |
 | **Compositor / Window IPC** | Win32 User32 / DWM / VirtualDesktop COM | Direct Hyprland UNIX domain socket (`.socket.sock` & `.socket2.sock`) |
 | **Screen Capture** | Win32 GDI `BitBlt` / `PrintWindow` | Pipe-streamed `grim` (`wlr-screencopy-unstable-v1`) direct to RAM |
 | **Workspaces / Desktops** | Windows COM `IVirtualDesktopManager` | Hyprland dynamic workspaces (`dispatch workspace / movetoworkspace`) |
@@ -54,6 +56,9 @@ Tour of the Web-based Sidecar Control Hub (`http://localhost:8765`), showing rea
 - **Native Win32 Clipboard Bridge**: Atomic text injection via global Win32 memory allocations and simulated `Ctrl+V` for instantaneous multi-line code and text insertion.
 - **Window State & Lifecycle Hardening**: Targeted `WM_CLOSE` / `SC_CLOSE` message dispatch, window snapping (grid, quadrants, monitor work area), and elevated process awareness.
 - **Desktop Contention Governor**: Real-time user physical mouse contention detection and configurable corner failsafe (`(0,0)` abort).
+- **Native Linux AT-SPI2 Semantic Accessibility Tree**: Zero-token accessibility tree inspection over D-Bus (`org.a11y.atspi`), providing exact UI control hierarchies and bounding boxes for GTK, Qt, Electron, and Firefox applications matching Windows UIA.
+- **Unprivileged Wayland Virtual Pointer Protocol**: Direct binary wire protocol client connecting to `$WAYLAND_DISPLAY` and binding `zwlr_virtual_pointer_manager_v1` for 100% rootless, unprivileged cursor and click simulation without requiring `/dev/uinput` permissions or udev rules.
+- **Hardware-Accelerated 60 FPS PipeWire Recording**: Sub-process recording via `wl-screenrec` / `wf-recorder` tapping DMA-BUF and VA-API / NVENC hardware encoders for 60 FPS desktop capture with near-zero CPU load, plus automated ffmpeg transcode.
 
 ---
 

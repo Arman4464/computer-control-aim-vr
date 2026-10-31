@@ -287,3 +287,27 @@ python cli.py macro list
 | Replay target moved or resized during macro execution | UI layout drifted between recording and playback. | **Macro Engine 5-Tier Fallback**: Automatically evaluates `Tier 1 (UIA)` $\rightarrow$ `Tier 2 (OCR)` $\rightarrow$ `Tier 3 (32x32 pHash)` $\rightarrow$ `Tier 4 (Relative window coordinates)` $\rightarrow$ `Tier 5 (Synchronous coordinate match)`. |
 | Secondary monitor clicks misaligned | Negative virtual screen coordinate clamping. | Virtual screen origin is mapped directly without `max(0, ...)` clamping, preserving negative coordinates on auxiliary monitors. |
 | Resizing margin offset (7-8px drop shadow) | DWM invisible resize margins inflating bounds. | `get_window_extended_bounds()` utilizes `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)` to strip aero drop shadows. |
+| Linux `/dev/uinput` permission denied | Non-root user running without uinput udev group. | **Zero-Root Protocol Fallback**: Automatically connects to `$WAYLAND_DISPLAY` and binds `zwlr_virtual_pointer_manager_v1` directly for unprivileged input injection. |
+| Linux accessibility tree missing | Host D-Bus AT-SPI session not initialized. | `ATSPIInspector` automatically resolves bus address from `org.a11y.Bus` or `/run/user/<uid>/at-spi/bus_0`. If AT-SPI is disabled, gracefully falls back to local Tesseract streaming OCR. |
+| Linux screen recording high CPU load | Software frame capture polling full displays. | **PipeWire Hardware Portal**: Automatically invokes `wl-screenrec` / `wf-recorder` with VA-API / NVENC DMA-BUF encoding for 60 FPS recording with zero CPU overhead. |
+
+---
+
+## 6. Cross-Platform SOTA Architecture (Arch Linux Wayland & Windows 10/11)
+
+### Linux (Hyprland / Wayland) SOTA Subsystems
+1. **Semantic AT-SPI2 Accessibility Inspection (`inspect_ui` / `find_element`)**:
+   - Queries `org.a11y.atspi` via D-Bus session bus.
+   - Extracts complete element extents, names, and normalized roles (`Button`, `Edit`, `CheckBox`, etc.).
+   - Matches the exact schema of Windows UIA with zero hallucination.
+2. **Rootless Wayland Virtual Pointer Protocol (`zwlr_virtual_pointer_v1`)**:
+   - Pure Python zero-dependency binary wire protocol client connecting directly to `$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY`.
+   - Sends motion absolute, button press/release, and axis scroll frames without needing root privileges or `/dev/uinput`.
+3. **Hardware PipeWire ScreenCast Portal (`record_screen`)**:
+   - Spawns `wl-screenrec` (VA-API / NVENC DMA-BUF) or `wf-recorder` for true 60 FPS recording.
+   - Transcodes to animated WebP or raw MP4 with zero memory copies.
+
+### Windows 10 & 11 Cross-Compatibility Hardening
+1. **PowerShell UTF-8 Output Encoding**: Wrapped all subprocess calls with `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` to prevent garbled text across Windows 10 PS 5.1 and Windows 11 PS 7+.
+2. **Deterministic 10-Second Command Timeouts**: Guard against hung COM connectors or shell dialogs.
+3. **Platform-Gated Invocations**: Seamless detection of Windows vs Linux with zero runtime import crashes.

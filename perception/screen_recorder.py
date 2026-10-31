@@ -10,6 +10,10 @@ import os
 import time
 import threading
 import ctypes
+import subprocess
+import shutil
+import signal
+import tempfile
 from ctypes import wintypes
 from typing import Optional, Dict, Any, List, Tuple
 from PIL import Image, ImageDraw
@@ -45,6 +49,11 @@ class ScreenRecorder:
         self._paused = False
         self._thread: Optional[threading.Thread] = None
 
+        # Linux Hardware PipeWire Recorder Process (wl-screenrec / wf-recorder)
+        self._hardware_proc: Optional[subprocess.Popen] = None
+        self._hardware_tmp_file: Optional[str] = None
+        self._hardware_tool: Optional[str] = None
+
         # Configuration for active recording session
         self.fps: int = 15
         self.target: Optional[str] = None
@@ -62,7 +71,7 @@ class ScreenRecorder:
     @property
     def is_recording(self) -> bool:
         with self._lock:
-            return self._recording
+            return self._recording or (self._hardware_proc is not None and self._hardware_proc.poll() is None)
 
     def start(
         self,
@@ -75,17 +84,18 @@ class ScreenRecorder:
         max_duration: float = 120.0,
     ) -> Dict[str, Any]:
         """
-        Starts the continuous recording loop in a background thread.
+        Starts the continuous recording loop in a background thread or launches
+        hardware-accelerated PipeWire/wlroots recording (wl-screenrec / wf-recorder) on Linux.
         """
         with self._lock:
-            if self._recording:
+            if self._recording or (self._hardware_proc and self._hardware_proc.poll() is None):
                 return {
                     "status": "already_recording",
                     "elapsed_s": round(time.time() - self.start_time, 2),
                     "frame_count": len(self.frames),
                 }
 
-            self.fps = max(1, min(30, int(fps)))
+            self.fps = max(1, min(60, int(fps)))
             self.target = target
             self.crop_region = crop_region
             self.max_dim = int(max_dim)
@@ -99,15 +109,83 @@ class ScreenRecorder:
             self._recording = True
             self._paused = False
 
+            # Check for Linux Hardware-Accelerated PipeWire ScreenCast Portal (wl-screenrec / wf-recorder)
+            hw_tool = None
+            if sys.platform.startswith("linux"):
+                if shutil.which("wl-screenrec"):
+                    hw_tool = "wl-screenrec"
+                elif shutil.which("wf-recorder"):
+                    hw_tool = "wf-recorder"
+
+            if hw_tool:
+                try:
+                    fd, tmp_video = tempfile.mkstemp(suffix=".mp4", prefix="aim_rec_")
+                    os.close(fd)
+                    self._hardware_tmp_file = tmp_video
+                    self._hardware_tool = hw_tool
+
+                    cmd = [hw_tool]
+                    geo_str = None
+                    if self.crop_region:
+                        rx, ry, rw, rh = self.crop_region
+                        geo_str = f"{rx},{ry} {rw}x{rh}"
+                    elif self.target:
+                        try:
+                            _, bounds = default_capture_manager.get_raw_frame(target=self.target)
+                            if bounds and len(bounds) >= 4 and bounds[2] > 0 and bounds[3] > 0:
+                                geo_str = f"{bounds[0]},{bounds[1]} {bounds[2]}x{bounds[3]}"
+                        except Exception:
+                            pass
+
+                    if hw_tool == "wl-screenrec":
+                        cmd.extend(["-f", tmp_video])
+                        if geo_str:
+                            cmd.extend(["-g", geo_str])
+                        if not self.include_cursor:
+                            cmd.append("--no-cursor")
+                        cmd.append("--low-power=off")
+                    elif hw_tool == "wf-recorder":
+                        cmd.extend(["-f", tmp_video])
+                        if geo_str:
+                            cmd.extend(["-g", geo_str])
+                        if not self.include_cursor:
+                            cmd.append("-c")
+
+                    self._hardware_proc = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.PIPE,
+                    )
+
+                    sys.stderr.write(
+                        f"[ScreenRecorder] Started Linux PipeWire hardware recording via {hw_tool} @ {self.fps} FPS (cmd={' '.join(cmd)})\n"
+                    )
+
+                    return {
+                        "status": "started",
+                        "backend": f"hardware_{hw_tool}",
+                        "fps": self.fps,
+                        "target": self.target or "full_screen",
+                        "max_dim": self.max_dim,
+                        "include_cursor": self.include_cursor,
+                    }
+                except Exception as ex:
+                    sys.stderr.write(f"[ScreenRecorder] Hardware recording start failed: {ex}. Falling back to software capture.\n")
+                    self._hardware_proc = None
+                    self._hardware_tmp_file = None
+                    self._hardware_tool = None
+
+            # Fallback: software capture worker thread
             self._thread = threading.Thread(target=self._capture_worker, daemon=True)
             self._thread.start()
 
             sys.stderr.write(
-                f"[ScreenRecorder] Started recording @ {self.fps} FPS (target={self.target or 'full_screen'}, max_dim={self.max_dim})\n"
+                f"[ScreenRecorder] Started software recording @ {self.fps} FPS (target={self.target or 'full_screen'}, max_dim={self.max_dim})\n"
             )
 
             return {
                 "status": "started",
+                "backend": "software_pil",
                 "fps": self.fps,
                 "target": self.target or "full_screen",
                 "max_dim": self.max_dim,
@@ -117,15 +195,27 @@ class ScreenRecorder:
     def status(self) -> Dict[str, Any]:
         """Returns current recording session telemetry."""
         with self._lock:
-            if not self._recording:
+            if not self._recording and not (self._hardware_proc and self._hardware_proc.poll() is None):
                 return {"is_recording": False, "status": "idle"}
 
             elapsed = time.time() - self.start_time
+            if self._hardware_proc and self._hardware_proc.poll() is None:
+                return {
+                    "is_recording": True,
+                    "backend": f"hardware_{self._hardware_tool}",
+                    "is_paused": self._paused,
+                    "elapsed_s": round(elapsed, 2),
+                    "fps": self.fps,
+                    "target": self.target or "full_screen",
+                    "max_dim": self.max_dim,
+                }
+
             count = len(self.frames)
             current_fps = round(count / elapsed, 1) if elapsed > 0 else 0.0
 
             return {
                 "is_recording": True,
+                "backend": "software_pil",
                 "is_paused": self._paused,
                 "elapsed_s": round(elapsed, 2),
                 "frame_count": count,
@@ -137,30 +227,129 @@ class ScreenRecorder:
     def pause(self) -> Dict[str, Any]:
         """Pauses frame acquisition."""
         with self._lock:
-            if not self._recording:
+            if not self._recording and not (self._hardware_proc and self._hardware_proc.poll() is None):
                 return {"status": "not_recording"}
             self._paused = True
+            if self._hardware_proc and self._hardware_proc.poll() is None:
+                if hasattr(signal, "SIGSTOP") and hasattr(os, "kill"):
+                    try:
+                        os.kill(self._hardware_proc.pid, signal.SIGSTOP)
+                    except Exception:
+                        pass
+                return {"status": "paused", "backend": f"hardware_{self._hardware_tool}"}
             return {"status": "paused", "frame_count": len(self.frames)}
 
     def resume(self) -> Dict[str, Any]:
         """Resumes frame acquisition."""
         with self._lock:
-            if not self._recording:
+            if not self._recording and not (self._hardware_proc and self._hardware_proc.poll() is None):
                 return {"status": "not_recording"}
             self._paused = False
+            if self._hardware_proc and self._hardware_proc.poll() is None:
+                if hasattr(signal, "SIGCONT") and hasattr(os, "kill"):
+                    try:
+                        os.kill(self._hardware_proc.pid, signal.SIGCONT)
+                    except Exception:
+                        pass
+                return {"status": "resumed", "backend": f"hardware_{self._hardware_tool}"}
             return {"status": "resumed", "frame_count": len(self.frames)}
 
     def stop(self, output_path: str, format: str = "webp") -> Dict[str, Any]:
         """
-        Stops the recording worker and compiles buffered frames into an animated WebP or GIF file.
+        Stops the recording worker and compiles recorded stream or buffered frames
+        into an MP4, WebP, or GIF file.
         """
         with self._lock:
-            if not self._recording:
+            if not self._recording and not self._hardware_proc:
                 return {"status": "not_recording", "error": "No active recording session."}
 
             self._recording = False
             self._paused = False
+            hw_proc = self._hardware_proc
+            hw_tmp = self._hardware_tmp_file
+            hw_tool = self._hardware_tool
+            self._hardware_proc = None
+            self._hardware_tmp_file = None
+            self._hardware_tool = None
 
+        elapsed = time.time() - self.start_time
+
+        # Handle Hardware Recording Process Termination
+        if hw_proc:
+            try:
+                sig = getattr(signal, "SIGINT", signal.SIGTERM)
+                hw_proc.send_signal(sig)
+                try:
+                    hw_proc.wait(timeout=5.0)
+                except subprocess.TimeoutExpired:
+                    hw_proc.kill()
+                    hw_proc.wait(timeout=2.0)
+            except Exception as e:
+                sys.stderr.write(f"[ScreenRecorder] Error stopping hardware process: {e}\n")
+
+            if not hw_tmp or not os.path.exists(hw_tmp) or os.path.getsize(hw_tmp) == 0:
+                return {"status": "error", "error": f"Hardware recording with {hw_tool} produced no data."}
+
+            out_dir = os.path.dirname(os.path.abspath(output_path))
+            if out_dir:
+                os.makedirs(out_dir, exist_ok=True)
+
+            fmt = format.lower().strip()
+            if fmt in ("mp4", "mkv", "webm") or output_path.lower().endswith((".mp4", ".mkv", ".webm")):
+                shutil.move(hw_tmp, output_path)
+                file_size_kb = round(os.path.getsize(output_path) / 1024, 1)
+                return {
+                    "status": "saved",
+                    "output_path": os.path.abspath(output_path),
+                    "backend": f"hardware_{hw_tool}",
+                    "format": fmt if fmt in ("mp4", "mkv", "webm") else "mp4",
+                    "duration_s": round(elapsed, 2),
+                    "fps": self.fps,
+                    "file_size_kb": file_size_kb,
+                }
+
+            if shutil.which("ffmpeg"):
+                try:
+                    ffmpeg_cmd = [
+                        "ffmpeg", "-y", "-i", hw_tmp,
+                        "-vf", f"fps={self.fps},scale=min({self.max_dim}\\,iw):-1:flags=lanczos",
+                    ]
+                    if fmt == "webp":
+                        ffmpeg_cmd.extend(["-vcodec", "libwebp", "-lossless", "0", "-q:v", str(self.quality), "-loop", "0", output_path])
+                    else:
+                        ffmpeg_cmd.extend(["-loop", "0", output_path])
+
+                    subprocess.run(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    if os.path.exists(hw_tmp):
+                        os.remove(hw_tmp)
+                    file_size_kb = round(os.path.getsize(output_path) / 1024, 1)
+                    return {
+                        "status": "saved",
+                        "output_path": os.path.abspath(output_path),
+                        "backend": f"hardware_{hw_tool}_transcoded",
+                        "format": fmt,
+                        "duration_s": round(elapsed, 2),
+                        "fps": self.fps,
+                        "file_size_kb": file_size_kb,
+                    }
+                except Exception as ex:
+                    sys.stderr.write(f"[ScreenRecorder] ffmpeg transcode failed: {ex}. Falling back to copying raw MP4.\n")
+
+            final_mp4 = output_path if output_path.lower().endswith(".mp4") else f"{output_path}.mp4"
+            shutil.move(hw_tmp, final_mp4)
+            file_size_kb = round(os.path.getsize(final_mp4) / 1024, 1)
+            return {
+                "status": "saved",
+                "output_path": os.path.abspath(final_mp4),
+                "backend": f"hardware_{hw_tool}",
+                "format": "mp4",
+                "duration_s": round(elapsed, 2),
+                "fps": self.fps,
+                "file_size_kb": file_size_kb,
+                "note": "Saved as MP4 because ffmpeg was unavailable for animated WebP/GIF transcode.",
+            }
+
+        # Software capture fallback
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=3.0)
 

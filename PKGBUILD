@@ -17,6 +17,10 @@ depends=(
 )
 optdepends=(
     'hyprland: Native Wayland compositor support & socket IPC'
+    'at-spi2-core: Native Linux accessibility D-Bus tree inspection (org.a11y.atspi)'
+    'wl-screenrec: Hardware-accelerated 60 FPS DMA-BUF / PipeWire screen recording (VA-API / NVENC)'
+    'wf-recorder: wlr-screencopy PipeWire screen recording fallback'
+    'ffmpeg: High-quality animated WebP/GIF hardware transcoding'
     'tesseract: High-speed local offline streaming OCR'
     'wtype: Wayland keyboard dispatch fallback'
     'ydotool: Virtual uinput daemon fallback'

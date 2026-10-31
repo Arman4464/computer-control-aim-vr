@@ -245,6 +245,12 @@ class UInputEngine(BaseInputEngine):
         self._uinput_initialized = False
         self._cursor_x = 0
         self._cursor_y = 0
+        self._virtual_pointer = None
+        try:
+            from control.platform.hyprland.wayland_virtual_pointer import default_virtual_pointer
+            self._virtual_pointer = default_virtual_pointer
+        except Exception:
+            self._virtual_pointer = None
         self._init_uinput()
 
     def _init_uinput(self):
@@ -313,6 +319,14 @@ class UInputEngine(BaseInputEngine):
         except Exception:
             pass
 
+        # SOTA Wayland Protocol Fallback: zwlr_virtual_pointer_v1
+        if self._virtual_pointer and self._virtual_pointer.is_available():
+            try:
+                self._virtual_pointer.move_absolute(self._cursor_x, self._cursor_y)
+                return self._cursor_x, self._cursor_y
+            except Exception:
+                pass
+
         # Fallback: ydotool mousemove --absolute
         if shutil.which("ydotool"):
             try:
@@ -352,6 +366,14 @@ class UInputEngine(BaseInputEngine):
 
         btn_code = self._get_button_code(button)
 
+        # Primary SOTA Wayland Protocol: unprivileged zwlr_virtual_pointer_v1
+        if self._virtual_pointer and self._virtual_pointer.is_available():
+            try:
+                self._virtual_pointer.button_down(btn_code)
+                return self.get_position()
+            except Exception:
+                pass
+
         if self._uinput_device:
             self._uinput_device.write(EV_KEY, btn_code, 1)
             self._uinput_device.syn()
@@ -371,6 +393,14 @@ class UInputEngine(BaseInputEngine):
 
         btn_code = self._get_button_code(button)
 
+        # Primary SOTA Wayland Protocol: unprivileged zwlr_virtual_pointer_v1
+        if self._virtual_pointer and self._virtual_pointer.is_available():
+            try:
+                self._virtual_pointer.button_up(btn_code)
+                return self.get_position()
+            except Exception:
+                pass
+
         if self._uinput_device:
             self._uinput_device.write(EV_KEY, btn_code, 0)
             self._uinput_device.syn()
@@ -387,6 +417,16 @@ class UInputEngine(BaseInputEngine):
     def click(self, x: Optional[int] = None, y: Optional[int] = None, button: str = "left", clicks: int = 1) -> Tuple[int, int]:
         if x is not None and y is not None:
             self.move_cursor(x, y)
+
+        btn_code = self._get_button_code(button)
+
+        # Primary SOTA Wayland Protocol: unprivileged zwlr_virtual_pointer_v1
+        if self._virtual_pointer and self._virtual_pointer.is_available():
+            try:
+                self._virtual_pointer.click(btn_code, clicks=clicks)
+                return self.get_position()
+            except Exception:
+                pass
 
         # Direct ydotool atomic click fallback (0xC0 = down | up)
         if not self._uinput_device and shutil.which("ydotool"):
@@ -428,6 +468,14 @@ class UInputEngine(BaseInputEngine):
     def scroll(self, clicks: int, x: Optional[int] = None, y: Optional[int] = None) -> None:
         if x is not None and y is not None:
             self.move_cursor(x, y)
+
+        # Primary SOTA Wayland Protocol: unprivileged zwlr_virtual_pointer_v1
+        if self._virtual_pointer and self._virtual_pointer.is_available():
+            try:
+                self._virtual_pointer.axis_scroll(clicks)
+                return
+            except Exception:
+                pass
 
         if self._uinput_device:
             val = int(clicks)
