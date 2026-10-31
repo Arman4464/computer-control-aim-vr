@@ -1,68 +1,36 @@
-# Computer Control (AIM-VR 3.0)
+# Computer Control (AIM-VR 3.0 - Arch Linux Hyprland Edition)
 
-[![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11%20%7C%20Arch%20Linux%20Hyprland-blue.svg)](https://archlinux.org)
+[![Platform](https://img.shields.io/badge/Platform-Arch%20Linux%20(Hyprland%20Wayland)-blue.svg)](https://archlinux.org)
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![MCP Version](https://img.shields.io/badge/MCP-2024--11--05-green.svg)](https://modelcontextprotocol.io/)
-[![Tools](https://img.shields.io/badge/MCP%20Tools-41%20Tools-blueviolet.svg)](mcp_schemas/)
+[![Tools](https://img.shields.io/badge/MCP%20Tools-35%20Linux%20Tools-blueviolet.svg)](mcp_schemas/)
 [![Tests](https://img.shields.io/badge/Tests-Passing%20(100%25)-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Autonomous In-Memory Vision Runner (AIM-VR 3.0)** is an industrial-grade desktop automation, macro recording, and computer control engine engineered for LLMs and AI agents operating natively on **Windows 10/11** and **Arch Linux with Hyprland (Wayland)**.
+> [!NOTE]
+> **Dedicated Linux Edition**: This branch (`feat/arch-hyprland`) is engineered 100% natively for **Arch Linux running Hyprland (Wayland)** with zero Windows dependencies.
+> For the Windows 10 & 11 edition, see the [`main`](https://github.com/Arman4464/computer-control-aim-vr/tree/main) branch.
 
-Unlike standard vision-agent frameworks that suffer from sluggish multi-turn screenshot round-trips, coordinate misalignment, and desktop contention, AIM-VR 3.0 delivers **sub-30ms closed-loop execution**, **hardware-level kernel `/dev/uinput` and Win32 input injection**, **sub-15ms local native OCR**, **zero-disk-write Grim and GDI screencopy pipelines**, **a 5-tier self-healing Semantic Macro Engine**, and **speculative Action DAG orchestration**.
+**Autonomous In-Memory Vision Runner (AIM-VR 3.0)** is an industrial-grade desktop automation, macro recording, and computer control engine engineered for LLMs and AI agents operating natively on **Arch Linux with Hyprland (Wayland)**.
 
----
-
-## Supported Operating Systems & Compositors
-
-| Feature | Windows 10 & 11 | Arch Linux (Hyprland / Wayland) |
-| :--- | :--- | :--- |
-| **Input Engine** | Win32 `SendInput` (hardware scan-codes & unicode) | Wayland `zwlr_virtual_pointer_v1` (unprivileged zero-root wire protocol), `/dev/uinput`, `ydotool` |
-| **Accessibility Tree** | Native Windows UI Automation (UIA) | FreeDesktop AT-SPI2 D-Bus (`org.a11y.atspi`) semantic tree inspector |
-| **Screen Recording** | Continuous 15-30 FPS WebP/GIF thread worker | Hardware-accelerated 60 FPS PipeWire DMA-BUF portal (`wl-screenrec` / `wf-recorder` VA-API / NVENC) |
-| **Compositor / Window IPC** | Win32 User32 / DWM / VirtualDesktop COM | Direct Hyprland UNIX domain socket (`.socket.sock` & `.socket2.sock`) |
-| **Screen Capture** | Win32 GDI `BitBlt` / `PrintWindow` | Pipe-streamed `grim` (`wlr-screencopy-unstable-v1`) direct to RAM |
-| **Workspaces / Desktops** | Windows COM `IVirtualDesktopManager` | Hyprland dynamic workspaces (`dispatch workspace / movetoworkspace`) |
-| **Clipboard** | Win32 `OpenClipboard` / `CF_UNICODETEXT` | Native `wl-clipboard` (`wl-copy` / `wl-paste` text & PNG) |
-| **Notifications** | WinRT Action Center Toast XML | FreeDesktop D-Bus / `notify-send` |
-| **App Execution** | Win32 `ShellExecuteExW` & App Paths Registry | Hyprland session `dispatch exec` & `xdg-open` |
-| **Audio & Media** | Win32 multimedia virtual key dispatch | PipeWire `wpctl`, PulseAudio `pactl`, multimedia keys |
+Unlike standard vision-agent frameworks that suffer from sluggish multi-turn screenshot round-trips, coordinate misalignment, and desktop contention, AIM-VR 3.0 delivers **sub-30ms closed-loop execution**, **rootless unprivileged Wayland virtual pointer injection**, **zero-token AT-SPI2 semantic accessibility trees**, **zero-disk-write Grim screencopy and streaming OCR**, **a 5-tier self-healing Semantic Macro Engine**, and **speculative Action DAG orchestration**.
 
 ---
 
-## Live Demonstrations
+## The Three SOTA Linux Subsystems
 
-### 1. Autonomous Live Reddit Submission
-Continuous 15 FPS hardware cursor screen recording showing the AI agent autonomously navigating Google Chrome, applying flairs with the Two-Phase Modal Protocol, and submitting the post in ~3.2 seconds without turn-by-turn screenshot micromanagement:
+### 1. AT-SPI2 Semantic Accessibility Tree Inspector
+Zero-token semantic accessibility tree extraction over the FreeDesktop D-Bus session bus (`org.a11y.atspi`). Traverses accessible objects, extracts live screen coordinate extents, and normalizes native roles (`push button` $\rightarrow$ `Button`, `entry` $\rightarrow$ `Edit`, `check box` $\rightarrow$ `CheckBox`, `list item` $\rightarrow$ `ListItem`) for GTK, Qt, Electron, and Firefox applications with zero vision token consumption.
 
-![Live Autonomous Reddit Submission](assets/reddit_live_post.webp)
+### 2. Unprivileged Wayland Virtual Pointer Protocol Client
+Direct binary wire protocol client connecting to the compositor socket at `$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY` and binding `zwlr_virtual_pointer_manager_v1`. Provides 100% rootless, unprivileged mouse cursor positioning, clicking, dragging, and axis scrolling without requiring `/dev/uinput` permissions, root rights, or custom udev groups.
 
-### 2. Sidecar Hub & Desktop Virtualization Tour
-Tour of the Web-based Sidecar Control Hub (`http://localhost:8765`), showing real-time system diagnostics, layout snapping, and Picture-in-Picture sandbox virtualization:
-
-![Extension & Sidecar Hub Tour](assets/extension_tour.webp)
-
----
-
-## Key Capabilities
-
-- **Zero-Token High-Speed COM Connectors (Tier 0)**: Direct object-model automation for File Explorer (`Shell.Application`), Microsoft Excel (`Excel.Application`), and Chromium browsers (`Chrome/Edge CDP`) without taking screenshots or consuming LLM vision tokens.
-- **Hybrid Semantic Macro Engine**: Record human or agent interactions with Ramer-Douglas-Peucker (RDP) trajectory compression ($\epsilon = 2.5\text{ px}$), visual perceptual hashing (32x32 pHash), and replay with 5-tier self-healing fallback (`UIA -> OCR -> pHash -> Relative -> Sync`).
-- **Speculative Action DAG Engine**: Declare non-linear execution graphs with topological sorting, variable interpolation (`{{steps.id.result}}`), and closed-loop micro-servoing verification.
-- **Isolated Virtual Desktop Sandboxing**: Spawn background tasks on dedicated Win32 desktops (`AIMVR_Sandbox`) with real-time Picture-in-Picture (PiP) preview. Zero mouse/keyboard cursor hijacking.
-- **Sub-15ms Local Native WinRT OCR**: Persistent background PowerShell daemon tapping hardware-accelerated Windows Runtime OCR with zero API latency and zero cloud costs.
-- **OmniParser V2 Set-of-Marks (SOM)**: Hierarchical element detection with Non-Maximum Suppression (NMS) and numbered badge overlays for deterministic visual grounding.
-- **Per-Monitor DPI Aware V2**: Exact physical-to-virtual coordinate transformations handling mixed-DPI setups and negative coordinate multi-monitor arrays.
-- **Native Win32 Clipboard Bridge**: Atomic text injection via global Win32 memory allocations and simulated `Ctrl+V` for instantaneous multi-line code and text insertion.
-- **Window State & Lifecycle Hardening**: Targeted `WM_CLOSE` / `SC_CLOSE` message dispatch, window snapping (grid, quadrants, monitor work area), and elevated process awareness.
-- **Desktop Contention Governor**: Real-time user physical mouse contention detection and configurable corner failsafe (`(0,0)` abort).
-- **Native Linux AT-SPI2 Semantic Accessibility Tree**: Zero-token accessibility tree inspection over D-Bus (`org.a11y.atspi`), providing exact UI control hierarchies and bounding boxes for GTK, Qt, Electron, and Firefox applications matching Windows UIA.
-- **Unprivileged Wayland Virtual Pointer Protocol**: Direct binary wire protocol client connecting to `$WAYLAND_DISPLAY` and binding `zwlr_virtual_pointer_manager_v1` for 100% rootless, unprivileged cursor and click simulation without requiring `/dev/uinput` permissions or udev rules.
-- **Hardware-Accelerated 60 FPS PipeWire Recording**: Sub-process recording via `wl-screenrec` / `wf-recorder` tapping DMA-BUF and VA-API / NVENC hardware encoders for 60 FPS desktop capture with near-zero CPU load, plus automated ffmpeg transcode.
+### 3. PipeWire 60 FPS Hardware Screen Recording Portal
+GPU hardware-accelerated desktop and window recording utilizing `wl-screenrec` / `wf-recorder` via DMA-BUF (VA-API / NVENC) for smooth 60 FPS recording with near-zero CPU utilization. Automatically transcodes to high-compression animated WebP or raw MP4 upon completion.
 
 ---
 
-## System Architecture
+## Linux System Architecture
 
 ```
                                       +-----------------------+
@@ -72,7 +40,7 @@ Tour of the Web-based Sidecar Control Hub (`http://localhost:8765`), showing rea
                             +---------------------+---------------------+
                             |                                           |
                    MCP JSON-RPC (Stdio)                                CLI
-                   (41 Standard Tools)                                  |
+                   (35 Native Linux Tools)                              |
                             |                                           |
                             +---------------------+---------------------+
                                                   v
@@ -84,14 +52,13 @@ Tour of the Web-based Sidecar Control Hub (`http://localhost:8765`), showing rea
             |                                     |                                     |
             v                                     v                                     v
 +-------------------------------+ +-------------------------------+ +-------------------------------+
-|     Perception Subsystem      | |      Control Subsystem        | |     Isolation & Connectors    |
+|     Perception Subsystem      | |      Control Subsystem        | |       Hyprland Integration    |
 |-------------------------------| |-------------------------------| |-------------------------------|
-| * WinRT OCR Daemon (<15ms)    | | * Per-Monitor DPI V2 Engine   | | * Shell.Application COM       |
-| * UI Automation (UIA) Tree    | | * Hardware ScanCode Hotkeys   | | * Excel.Application COM       |
-| * GDI / PrintWindow Capture   | | * Win32 Clipboard Injection   | | * Chrome / Edge CDP           |
-| * Differential Dirty-Rects    | | * Window Layout / Snapping    | | * Zero-Flag DOM Companion     |
-| * OmniParser V2 SOM Badging   | | * Visual Servoing (<30ms)     | | * Win32 Virtual Desktop       |
-| * Multi-Monitor Geometries    | | * Safety Contention Governor  | | * PiP Sandbox Compositor      |
+| * AT-SPI2 D-Bus Tree (<5ms)   | | * zwlr_virtual_pointer_v1     | | * Hyprland UNIX Sockets       |
+| * Streaming Tesseract TSV     | | * Kernel /dev/uinput evdev    | | * Dynamic Workspaces          |
+| * Grim Zero-Disk RAM Pipe     | | * Wayland Clipboard (wl-copy) | | * Client Address Focusing     |
+| * 60 FPS PipeWire DMA-BUF     | | * playerctl MPRIS Audio/Media | | * Floating / Fullscreen Tile  |
+| * OmniParser V2 SOM Badging   | | * FreeDesktop notify-send     | | * Visual Servoing (<30ms)     |
 | * 32x32 Perceptual Hash       | | * Macro Engine (RDP + 5-Tier) | | * Speculative DAG Engine      |
 +-------------------------------+ +-------------------------------+ +-------------------------------+
 ```
@@ -103,218 +70,84 @@ Tour of the Web-based Sidecar Control Hub (`http://localhost:8765`), showing rea
 Every agent or operator using AIM-VR 3.0 must adhere to seven non-negotiable rules:
 
 1. **NEVER FALL INTO THE TURN-BY-TURN "SCREENSHOT & GUESS" ANTI-PATTERN**: Never take a screenshot after every single click. For 2+ actions, dispatch the sequence via `execute_autonomous_task`, `execute_action_dag`, or `macro_play` to execute locally in an in-memory closed loop in <2 seconds.
-2. **THE TWO-PHASE MODAL & DIALOG PROTOCOL**: Click target option $\rightarrow$ click commit button (`"Apply"`, `"Save"`, `"Done"`, `"Confirm"`). Never click `X` to exit a modal after making a selection.
-3. **THE CHROMIUM & WEB APP RULE**: Chromium apps do not expose DOM trees to Windows UIA. Use Layer 2 sub-15ms WinRT OCR text grounding or Tier 0 `browser_dom_action`.
-4. **NEVER SEND BLIND DESTRUCTIVE SHORTCUTS (`Alt+F4` / `Ctrl+W`)**: Global shortcuts strike whichever window happens to have foreground focus. Always use targeted `close_window(target="...")` which delivers Win32 `WM_CLOSE` messages directly to the target HWND without disturbing other apps.
-5. **PREFER NATIVE CLIPBOARD FOR LONG TEXT / CODE**: For code, URLs, or paragraphs, always use `clipboard(action="paste", text="...")` or the `paste_text` step. Keystroke simulation (`type_text`) is slower and prone to dropped characters under load.
-6. **VERIFY SCREEN STATE BEFORE ACTING ("Look Before You Touch")**: Inspect open windows and foreground focus using `get_screen_info` before triggering state changes.
-7. **WORKSPACE & WINDOW STATE RESTORATION ("Leave No Trace")**:
-   - If an application was unminimized to read data, **minimize it back** once done (`manage_window(target="...", action="state", state="minimize")`).
-   - If a helper app was opened solely to perform a task, **close it cleanly** (`close_window(target="...")`).
-   - Always **restore foreground focus** to the user's primary application when complete.
+2. **THE TWO-PHASE MODAL PROTOCOL (NEVER CANCEL WITH "X")**: When dealing with dialogs, flairs, dropdowns, or modals: click the target option $\rightarrow$ locate and click the commit action button (`"Apply"`, `"Save"`, `"Done"`, `"Confirm"`). Never click `X` to exit a modal after selecting an option.
+3. **THE CHROMIUM & WEB APP RULE (NO AT-SPI DOM TREES)**: Modern GPU web browsers (Google Chrome, Brave) do not expose DOM elements to Linux accessibility trees. Always use Layer 2 text grounding: `click(text="Label")` or companion `browser_dom_action`.
+4. **NEVER SEND BLIND DESTRUCTIVE SHORTCUTS (Alt+F4 / Super+Q)**: Global shortcuts strike whatever window currently has focus. Always use targeted window closing: `close_window(target="...")` or `aimvr close "<Title>"`.
+5. **PREFER NATIVE WAYLAND CLIPBOARD FOR ALL TEXT & CODE**: Always use `clipboard(action="paste", text="...")` or `paste_text` step. Keystroke-by-keystroke simulation is vulnerable to dropped keys; native `wl-clipboard` injection is instantaneous.
+6. **VERIFY SCREEN STATE BEFORE ACTING ("Look Before You Touch")**: Call `get_screen_info` to inspect `visible_windows`, client addresses, and active workspace before initiating window transitions.
+7. **RESTORE USER WORKSPACE STATE ("Leave No Trace")**: When finished, return to the user's active workspace and original focused window.
 
 ---
 
-## Model Context Protocol (MCP) Tools Reference (41 Tools)
+## 35 Native Linux MCP Tools
 
-AIM-VR 3.0 exposes 41 specialized MCP tools adhering to protocol version `2024-11-05`:
-
-### 1. High-Speed Programmatic & Browser Connectors (Tier 0)
-| Tool | Arguments | Purpose |
+| Tool | Category | Behavior |
 |---|---|---|
-| `com_explorer` | `action` (`list`/`open`/`get_selected`), `path` | Zero-token direct Shell.Application navigation, folder listing, and selected items. |
-| `com_excel` | `action` (`status`/`read_cell`/`write_cell`/`read_range`), `cell`, `value`, `sheet`, `rows`, `cols` | Direct Excel COM worksheet read/write; zero screenshot latency. |
-| `com_browser_cdp` | `action` (`list_tabs`/`navigate`/`evaluate_script`), `port`, `target_id`, `url`, `expression` | Chrome/Edge Chrome DevTools Protocol tab management and script evaluation. |
-| `browser_dom_action` | `action` (`click`/`fill`/`get_text`/`get_dom`/`query`), `selector`, `text`, `value`, `timeout` | Sub-5ms DOM queries, clicks, form filling, and DOM inspection via zero-flag companion extension. |
-
-### 2. Browser Companion Status & Diagnostics
-| Tool | Arguments | Purpose |
-|---|---|---|
-| `browser_bridge_status` | None | Checks the health of the companion browser extension loopback bridge and active tab info. |
-
-### 3. Autonomous Execution & Orchestration
-| Tool | Arguments | Purpose |
-|---|---|---|
-| `execute_action_dag` | `steps` (list), `stop_on_error` (bool), `auto_verify` (bool) | Non-linear Action DAG execution with dependency resolution, variable interpolation, and sub-30ms servoing. |
-| `execute_autonomous_task` | `steps` (list), `verify` (bool) | In-memory closed-loop runner with sub-30ms pixel-diff verification. |
-
-### 4. Hybrid Semantic Macro Engine
-| Tool | Arguments | Purpose |
-|---|---|---|
-| `macro_record` | `action` (`start`/`stop`/`cancel`), `name` | Records mouse and keyboard interactions with 5-tier semantic anchors and RDP polyline compression. |
-| `macro_play` | `name`, `speed_multiplier`, `self_heal`, `dry_run` | Replays recorded macros with 5-tier self-healing fallback (`UIA -> OCR -> pHash -> Relative -> Sync`). |
-| `macro_manage` | `action` (`list`/`get`/`delete`/`export`/`import`), `name`, `macro_data` | Lists saved macros, retrieves full macro definitions, or deletes recorded macros. |
-
-### 5. Virtual Desktop & PiP Sandboxing
-| Tool | Arguments | Purpose |
-|---|---|---|
-| `sandbox_launch` | `command` (string), `desktop_name` (string) | Spawns applications on an isolated background Win32 desktop (`AIMVR_Sandbox`). |
-| `sandbox_manage` | `action` (`status`/`close_window`/`destroy`), `target` | Inspects, closes, or terminates sandboxed desktop environments. |
-| `sandbox_capture` | `desktop_name` (string) | Generates a Picture-in-Picture composite preview of background desktop windows. |
-
-### 6. Visual Perception & Grounding
-| Tool | Arguments | Purpose |
-|---|---|---|
-| `get_screen_info` | None | Returns screen bounds, monitors, DPI scaling, foreground window, and visible windows list. |
-| `ocr_screen` | `target` (string), `query` (string) | Sub-15ms local WinRT OCR spotting and bounding box extraction. |
-| `screenshot` | `target` (string), `mode` (`full`/`delta`/`pip`), `som` (bool) | Screen capture with optional differential cropping or OmniParser Set-of-Marks badges. |
-| `inspect_ui` | `target` (string), `max_depth` (int), `max_elements` (int) | Low-token hierarchical text dump of the Windows UI Automation (UIA) tree. |
-| `find_element` | `query`, `target`, `role`, `scope`, `region` | Unified hybrid locator across UIA (Layer 1) and WinRT OCR (Layer 2) with modal dialog scoping. |
-| `record_screen` | `action` (`start`/`stop`/`status`), `output_path`, `fps`, `max_dim`, `format` | Continuous high-speed screen recorder compiling 24-bit animated WebP/GIF with hardware cursor stamping. |
-
-### 7. OmniParser Set-of-Marks (SOM)
-| Tool | Arguments | Purpose |
-|---|---|---|
-| `take_som_screenshot` | `target`, `client_only`, `max_elements` | Captures window/screen, extracts elements via UIA + WinRT OCR + contours, and renders numbered badges (`[1]`, `[2]`, `[3]`). |
-| `click_som_mark` | `mark_id`, `button`, `clicks` | Clicks an indexed SoM element mark directly by ID with zero coordinate guessing. |
-
-### 8. Granular Input Control
-| Tool | Arguments | Purpose |
-|---|---|---|
-| `click` | `query`, `target`, `mark_id`, `x`, `y`, `clicks`, `button` | Multi-tier click resolution: UIA -> OCR -> SOM -> coordinates. |
-| `hover` | `query`, `target`, `x`, `y`, `duration` | Moves cursor and hovers to trigger tooltips or flyout menus. |
-| `move_cursor` | `x`, `y`, `coords_mode` | Per-Monitor DPI aware cursor positioning. |
-| `mouse_down` | `button` (`left`/`right`/`middle`), `x`, `y` | Atomic mouse button press. |
-| `mouse_up` | `button` (`left`/`right`/`middle`), `x`, `y` | Atomic mouse button release. |
-| `drag` | `start_x`, `start_y`, `end_x`, `end_y`, `duration` | Smooth bezier/interpolated mouse drag with synchronized cursor updates. |
-| `scroll` | `clicks` (int), `x` (float), `y` (float), `delta_x`, `delta_y` | Hardware mouse wheel vertical and horizontal scrolling. |
-| `type_text` | `text` (string), `interval` (float) | Direct Unicode key event injection (`KEYEVENTF_UNICODE`). |
-| `hotkey` | `keys` (list) | Hardware scan-code combinations (`ctrl`, `alt`, `win`, `shift`, etc.). |
-| `press_key` | `key` (string), `down` (bool), `up` (bool) | Granular hardware key down/up event control. |
-
-### 9. Window Lifecycle & Clipboard Management
-| Tool | Arguments | Purpose |
-|---|---|---|
-| `clipboard` | `action` (`get`/`set`/`paste`), `text`, `restore` | Win32 native clipboard manager with instant paste simulation. |
-| `manage_window` | `target`, `action` (`snap`/`state`/`move_resize`), `position`, `state`, `bounds` | Snaps window to monitor work area regions or toggles minimize/maximize/restore. |
-| `focus_window` | `target` (string) | Bypasses `LockSetForegroundWindow` to bring window to verified foreground. |
-| `close_window` | `target` (string), `force` (bool) | Targeted non-destructive `WM_CLOSE` window closure. |
-
-### 10. System Utilities & Execution Lifecycle
-| Tool | Arguments | Purpose |
-|---|---|---|
-| `launch_app` | `name` (string), `args` (string) | Intelligent application resolution via App Paths, PATH, and ShellExecute. |
-| `control_media` | `action` (`volume_up`/`volume_down`/`toggle_mute`/`play_pause`/etc.), `steps` | Non-invasive hardware multimedia control. |
-| `configure_safety` | `speed`, `failsafe`, `contention`, `desktop_mode` | Adjusts execution delay, corner abort, and desktop mode. |
-| `notify` | `title`, `message`, `app_id`, `sound` | Sends native Windows Action Center toast notifications with optional sound. |
-| `registry` | `mode`, `path`, `name`, `value`, `val_type`, `view64` | High-speed native Windows Registry manager (`get`, `set`, `delete_value`, `delete_key`, `list`). |
-| `wait_for` | `condition`, `target`, `query`, `timeout`, `interval` | In-engine polling for UI conditions (`text_exists`, `window_exists`, `window_active`, `element_exists`) to eliminate LLM polling loops. |
+| `inspect_ui` | Perception | Traverses `org.a11y.atspi` D-Bus accessibility tree for GTK/Qt/Electron/Firefox. |
+| `ocr_screen` | Perception | Zero-disk-write in-memory Tesseract TSV OCR scan. |
+| `find_element` | Perception | Locates UI element bounding box `[x, y, w, h]` and center via AT-SPI2 or OCR. |
+| `screenshot` | Perception | Fast pipe-streamed `grim` screencopy to RAM. |
+| `take_som_screenshot` | Perception | Overlays OmniParser numbered marks for visual grounding. |
+| `click_som_mark` | Perception | Clicks an indexed SoM badge by integer ID. |
+| `move_cursor` | Control | Moves cursor via `zwlr_virtual_pointer_v1` or Hyprland IPC `movecursor`. |
+| `mouse_down` | Control | Presses mouse button via unprivileged Wayland virtual pointer. |
+| `mouse_up` | Control | Releases mouse button via unprivileged Wayland virtual pointer. |
+| `click` | Control | Atomic click sequence by coordinate, AT-SPI query, or OCR text label. |
+| `drag` | Control | Smooth interpolated mouse drag across display. |
+| `scroll` | Control | Wayland 24.8 fixed-point axis wheel scroll (-down, +up). |
+| `type_text` | Control | Character-by-character keyboard typing via virtual pointer/evdev. |
+| `press_key` | Control | Individual key press/release event dispatch. |
+| `hotkey` | Control | Multi-key combination dispatch (e.g. `["ctrl", "c"]`). |
+| `clipboard` | Control | Native Wayland clipboard get/set/paste via `wl-copy` / `wl-paste`. |
+| `focus_window` | Control | Switches workspace and focuses target window by title or client address. |
+| `close_window` | Control | Targeted Hyprland `closewindow address:<hex>` dispatch. |
+| `manage_window` | Control | Workspace movement, fullscreen, and floating state management. |
+| `get_screen_info` | Control | Returns monitor geometries, active workspace, and all Hyprland clients. |
+| `launch_app` | Control | Launches application via `dispatch exec` or `xdg-open`. |
+| `control_media` | Control | MPRIS track and volume control via `playerctl` / PipeWire `wpctl`. |
+| `notify` | Control | FreeDesktop desktop notification dispatch via `notify-send`. |
+| `record_screen` | Control | Hardware-accelerated 60 FPS PipeWire DMA-BUF portal recording (`wl-screenrec`). |
+| `wait_for` | Control | In-engine condition polling loop eliminating LLM turn-by-turn latency. |
+| `configure_safety` | Control | Adjusts speed profiles and user mouse contention governor. |
+| `execute_autonomous_task`| Execution | Closed-loop local multi-step workflow runner in <2 seconds. |
+| `execute_action_dag` | Execution | High-performance DAG pipeline with topological sorting and variable interpolation. |
+| `macro_record` | Execution | Captures repeatable user/agent workflows with RDP trajectory compression. |
+| `macro_play` | Execution | Replays macro with 5-tier self-healing fallback. |
+| `macro_manage` | Execution | Manages stored macro files (list, get, delete). |
+| `browser_bridge_status` | Extension | Checks connection to companion Chrome/Brave extension. |
+| `browser_dom_action` | Extension | Direct DOM click/fill dispatch via companion extension. |
+| `com_browser_cdp` | Extension | Direct WebSocket Chrome DevTools Protocol tab navigation. |
 
 ---
 
-## Unified Command-Line Interface (`cli.py`)
+## Installation & Setup on Arch Linux
 
-Run actions, inspect UI, execute macros, or run full DAG pipelines directly from the terminal:
+### Method 1: Arch Linux Pacman Package (`PKGBUILD`)
+```bash
+git clone -b feat/arch-hyprland https://github.com/Arman4464/computer-control-aim-vr.git
+cd computer-control-aim-vr
+makepkg -si
+```
 
-```powershell
-# 1. Inspect screen, monitors, foreground, and all open windows
-python cli.py info
-
-# 2. Hybrid Semantic Macro Engine
-python cli.py macro record start --name report_generation
-python cli.py macro record stop
-python cli.py macro play report_generation --speed 1.5
-python cli.py macro list
-
-# 3. Direct File Explorer COM navigation
-python cli.py explorer --list
-python cli.py explorer --open "shell:Downloads"
-python cli.py explorer --selected
-
-# 4. Direct Excel COM read / write
-python cli.py excel --status
-python cli.py excel --write A1 "Automated"
-python cli.py excel --read A1
-
-# 5. Window snapping and management
-python cli.py window "Notepad" --snap left
-python cli.py window "Chrome" --state minimize
-python cli.py close "Notepad"
-
-# 6. Native Win32 instant clipboard paste
-python cli.py clipboard --paste "Instant multiline code insertion"
-
-# 7. Local WinRT OCR text recognition
-python cli.py ocr --query "Downloads"
-
-# 8. Hardware multimedia control
-python cli.py media volume_up --steps 2
-python cli.py media play_pause
-
-# 9. PiP Sandbox desktop management
-python cli.py sandbox --launch "notepad.exe"
-python cli.py sandbox --status
-python cli.py sandbox --capture
-python cli.py sandbox --destroy
-
-# 10. Execute Speculative Action DAG
-python cli.py dag '[{"id": "open", "action": "launch_app", "name": "notepad"}, {"id": "snap", "action": "manage_window", "target": "Notepad", "sub_action": "snap", "position": "left", "depends_on": ["open"]}]'
+### Method 2: Python Virtual Environment
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+sudo pacman -S grim wl-clipboard libnotify tesseract wl-screenrec playerctl
 ```
 
 ---
 
-## Installation & Setup
-
-### Arch Linux (Hyprland / Wayland)
-
-1. **Install system dependencies via `pacman`**:
-   ```bash
-   sudo pacman -S --needed hyprland grim slurp wl-clipboard libinput tesseract python-pillow
-   ```
-
-2. **Configure `/dev/uinput` permissions (for hardware-level mouse/keyboard)**:
-   ```bash
-   sudo cp assets/99-aimvr-uinput.rules /etc/udev/rules.d/
-   sudo udevadm control --reload-rules && sudo udevadm trigger
-   sudo usermod -aG input $USER
-   ```
-   *(Note: `ydotool` and `wtype` are automatically detected and used as zero-setup fallbacks).*
-
-3. **Install the package using `PKGBUILD`**:
-   ```bash
-   makepkg -si
-   ```
-   Or install via pip in editable mode:
-   ```bash
-   pip install -e .
-   ```
-
----
-
-### Windows 10 & 11
-
-1. **Clone the repository**:
-   ```powershell
-   git clone https://github.com/Arman4464/computer-control-aim-vr.git
-   cd computer-control-aim-vr
-   ```
-
-2. **Install dependencies**:
-   ```powershell
-   pip install -r requirements.txt
-   ```
-
-3. **Run the automated test suite**:
-   ```powershell
-   python -m unittest discover -s tests -v
-   ```
-
----
-
-## MCP Server Configuration
-
-To attach AIM-VR 3.0 to Antigravity, Claude Desktop, Cursor, or any MCP-compatible agent host:
-
-Add to your `mcpSettings.json` or `claude_desktop_config.json`:
-
+## Running MCP Server
+Add to your Claude Desktop / Antigravity / Cursor MCP configuration:
 ```json
 {
   "mcpServers": {
     "computer-control": {
       "command": "python",
-      "args": [
-        "C:\\path\\to\\computer-control-aim-vr\\server.py"
-      ]
+      "args": ["-m", "server"],
+      "cwd": "/path/to/computer-control-aim-vr"
     }
   }
 }
@@ -322,32 +155,5 @@ Add to your `mcpSettings.json` or `claude_desktop_config.json`:
 
 ---
 
-## Testing & Quality Assurance
-
-The codebase includes an exhaustive test suite verifying every component against live Win32 APIs:
-
-```powershell
-# Run the complete test suite
-python -m unittest discover -s tests -v
-```
-
-### Covered Test Matrix:
-- Multi-monitor negative-offset coordinate transformations & Per-Monitor DPI V2 scaling.
-- Scan-code translation with OEM symbol protection (semicolons, quotes, slashes).
-- Win32 clipboard global memory allocation round-trips.
-- Monitor work-area window snapping and aspect ratios.
-- Safety governor speed profiles, corner failsafe, and user contention detection.
-- WinRT OCR daemon integration and bounding box accuracy.
-- OmniParser V2 Set-of-Marks, Intersection-over-Union (IoU), and Non-Maximum Suppression (NMS).
-- Speculative Action DAG execution, cycle detection, and template variable substitution.
-- Virtual Desktop creation, struct alignment, and PiP compositing.
-- Stdio JSON-RPC pipeline compatibility (`Content-Type` / `Content-Length` headers).
-- Macro Engine Ramer-Douglas-Peucker (RDP) polyline trajectory compression.
-- Macro Engine 32x32 visual difference perceptual hashing (pHash) and Hamming distance.
-- Macro Engine 5-tier self-healing fallback resolution (`UIA -> OCR -> pHash -> Relative -> Sync`).
-
----
-
 ## License
-
-This project is licensed under the [MIT License](LICENSE) — see the LICENSE file for details.
+MIT License. Engineered by Arman (AIM-VR Team).

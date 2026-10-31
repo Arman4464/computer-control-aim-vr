@@ -1038,6 +1038,16 @@ TOOLS_DEFINITIONS = [
 SCHEMAS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_schemas")
 
 
+WINDOWS_ONLY_TOOLS = {
+    "sandbox_launch",
+    "sandbox_capture",
+    "sandbox_manage",
+    "com_explorer",
+    "com_excel",
+    "registry",
+}
+
+
 def load_tool_definitions() -> List[Dict[str, Any]]:
     """
     Dynamically loads all MCP tool definitions from mcp_schemas/*.json files.
@@ -1055,12 +1065,13 @@ def load_tool_definitions() -> List[Dict[str, Any]]:
                     if "parameters" in schema and "inputSchema" not in schema:
                         schema["inputSchema"] = schema.pop("parameters")
                     if "name" in schema and "inputSchema" in schema:
-                        loaded_tools.append(schema)
+                        if schema["name"] not in WINDOWS_ONLY_TOOLS:
+                            loaded_tools.append(schema)
                 except Exception as exc:
                     sys.stderr.write(f"[MCP] Error loading schema {fn}: {exc}\n")
         if loaded_tools:
             return loaded_tools
-    return TOOLS_DEFINITIONS
+    return [t for t in TOOLS_DEFINITIONS if t.get("name") not in WINDOWS_ONLY_TOOLS]
 
 
 # Dynamically populate active tool definitions conforming strictly to MCP 2024-11-05
@@ -1185,6 +1196,8 @@ class MCPServer:
             }
 
     def execute_tool(self, name: str, args: Dict[str, Any]) -> tuple[list[dict[str, Any]], bool]:
+        if name in WINDOWS_ONLY_TOOLS:
+            return [{"type": "text", "text": f"Error: Tool '{name}' is Windows-only and not supported on Arch Linux (Hyprland / Wayland). Use native Linux tools."}], True
         ensure_interactive_desktop()
 
         if name == "get_screen_info":

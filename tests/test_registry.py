@@ -2,11 +2,19 @@
 Unit tests for the Windows Registry Manager (AIM-VR 3.0 Control Subsystem).
 """
 
+import sys
 import unittest
-from control.registry import default_registry, _parse_reg_path
-import winreg
+
+if sys.platform == "win32":
+    import winreg
+    from control.registry import default_registry, _parse_reg_path
+else:
+    winreg = None
+    default_registry = None
+    _parse_reg_path = None
 
 
+@unittest.skipUnless(sys.platform == "win32", "Windows Registry is Windows-only")
 class TestRegistryManager(unittest.TestCase):
 
     def setUp(self):
