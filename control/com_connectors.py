@@ -50,9 +50,7 @@ class ExplorerCOMConnector:
         """Executes a PowerShell script and returns parsed JSON output."""
         if sys.platform != "win32":
             return None
-        wrapped = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
-{script}"
+        wrapped = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n$OutputEncoding = [System.Text.Encoding]::UTF8\n{script}"
         try:
             res = subprocess.run(
                 ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", wrapped],
@@ -168,9 +166,7 @@ class ExcelCOMConnector:
     def _run_ps_json(script: str) -> Any:
         if sys.platform != "win32":
             return None
-        wrapped = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
-{script}"
+        wrapped = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n$OutputEncoding = [System.Text.Encoding]::UTF8\n{script}"
         try:
             res = subprocess.run(
                 ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", wrapped],

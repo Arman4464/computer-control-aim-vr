@@ -192,8 +192,9 @@ class BaseAppLauncher(ABC):
         """Opens file or URL via default system handler."""
         pass
 
-    # Common alias
-    launch = launch_app
+    def launch(self, name: str, args: Optional[str] = None) -> Dict[str, Any]:
+        """Alias for launch_app."""
+        return self.launch_app(name, args=args)
 
 
 class BaseSafety(ABC):
