@@ -57,6 +57,35 @@ def _send_media_key(action_name: str, vk_code: int):
         except Exception:
             pass
 
+    # On Linux: try wpctl (PipeWire / WirePlumber standard on Arch Hyprland) or pactl for volume
+    if action_name in ["volume_up", "volume_down", "toggle_mute"]:
+        if shutil.which("wpctl"):
+            try:
+                if action_name == "volume_up":
+                    subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "2%+"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return
+                elif action_name == "volume_down":
+                    subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "2%-"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return
+                elif action_name == "toggle_mute":
+                    subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return
+            except Exception:
+                pass
+        elif shutil.which("pactl"):
+            try:
+                if action_name == "volume_up":
+                    subprocess.run(["pactl", "set-sink-volume", "@DEFAULT_SINK@", "+2%"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return
+                elif action_name == "volume_down":
+                    subprocess.run(["pactl", "set-sink-volume", "@DEFAULT_SINK@", "-2%"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return
+                elif action_name == "toggle_mute":
+                    subprocess.run(["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return
+            except Exception:
+                pass
+
     # Try input engine key press
     key_map = {
         "volume_up": "volume_up",

@@ -36,16 +36,45 @@ class HyprlandIPC:
         self._clients_cache: Optional[List[Dict[str, Any]]] = None
         self._cache_time: float = 0.0
 
+    def _detect_signature(self) -> str:
+        """Discovers active Hyprland instance signature from runtime directory if not explicitly provided."""
+        if self.signature:
+            return self.signature
+        sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+        if sig:
+            self.signature = sig
+            return sig
+
+        # Scan $XDG_RUNTIME_DIR/hypr/ for instance signature directories
+        hypr_dir = os.path.join(self.runtime_dir, "hypr")
+        if os.path.isdir(hypr_dir):
+            try:
+                candidates = []
+                for entry in os.listdir(hypr_dir):
+                    entry_path = os.path.join(hypr_dir, entry)
+                    if os.path.isdir(entry_path):
+                        sock = os.path.join(entry_path, ".socket.sock")
+                        if os.path.exists(sock):
+                            mtime = os.path.getmtime(sock)
+                            candidates.append((mtime, entry))
+                if candidates:
+                    candidates.sort(reverse=True)
+                    self.signature = candidates[0][1]
+                    return self.signature
+            except Exception:
+                pass
+        return ""
+
     @property
     def command_socket_path(self) -> str:
         """Path to request-response command socket."""
-        sig = self.signature or os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+        sig = self._detect_signature()
         return os.path.join(self.runtime_dir, "hypr", sig, ".socket.sock")
 
     @property
     def event_socket_path(self) -> str:
         """Path to real-time event streaming socket."""
-        sig = self.signature or os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+        sig = self._detect_signature()
         return os.path.join(self.runtime_dir, "hypr", sig, ".socket2.sock")
 
     def is_available(self) -> bool:
@@ -121,6 +150,13 @@ class HyprlandIPC:
         try:
             return json.loads(raw)
         except json.JSONDecodeError as exc:
+            if "cursorpos" in query and "at:" in raw:
+                try:
+                    clean = raw.replace("at:", "").strip()
+                    px, py = clean.split(",", 1)
+                    return {"x": int(px.strip()), "y": int(py.strip())}
+                except Exception:
+                    pass
             sys.stderr.write(f"[HyprlandIPC] Failed to decode JSON for '{cmd}': {exc}\nRaw: {raw[:200]}\n")
             return [] if "clients" in query or "monitors" in query or "workspaces" in query else {}
 

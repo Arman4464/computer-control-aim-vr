@@ -107,7 +107,7 @@ class ExplorerCOMConnector:
 
         if sys.platform != "win32":
             from control.platform import get_platform_driver
-            return get_platform_driver().app_launcher.open_file_or_url(abs_path)
+            return get_platform_driver().launcher.open_file_or_url(abs_path)
 
         escaped_abs_path = abs_path.replace('\\', '\\\\')
         ps = f"""

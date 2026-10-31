@@ -121,6 +121,8 @@ class VirtualDesktopManager:
                 clients = default_hyprland_ipc.get_clients()
                 for c in clients:
                     if str(c.get("address")) == str(hwnd):
+                        if c.get("pinned", False):
+                            return True
                         return c.get("workspace", {}).get("id") == active_id
                 return True
             except Exception:

@@ -23,7 +23,7 @@ class HyprlandWindowManager(BaseWindowManager):
     def get_virtual_screen_bounds(self) -> Tuple[int, int, int, int]:
         """
         Calculates global virtual screen bounding box (left, top, width, height)
-        spanning all active monitors taking scaling and positions into account.
+        spanning all active monitors taking scaling, rotation transform, and positions into account.
         """
         monitors = self.ipc.get_monitors()
         if not monitors:
@@ -31,8 +31,20 @@ class HyprlandWindowManager(BaseWindowManager):
 
         min_x = min(m.get("x", 0) for m in monitors)
         min_y = min(m.get("y", 0) for m in monitors)
-        max_right = max(m.get("x", 0) + int(m.get("width", 1920) / max(0.1, m.get("scale", 1.0))) for m in monitors)
-        max_bottom = max(m.get("y", 0) + int(m.get("height", 1080) / max(0.1, m.get("scale", 1.0))) for m in monitors)
+
+        max_r_list = []
+        max_b_list = []
+        for m in monitors:
+            scale = max(0.1, float(m.get("scale", 1.0)))
+            w = int(m.get("width", 1920) / scale)
+            h = int(m.get("height", 1080) / scale)
+            if m.get("transform", 0) in (1, 3, 5, 7):
+                w, h = h, w
+            max_r_list.append(m.get("x", 0) + w)
+            max_b_list.append(m.get("y", 0) + h)
+
+        max_right = max(max_r_list)
+        max_bottom = max(max_b_list)
 
         return min_x, min_y, max_right - min_x, max_bottom - min_y
 
@@ -48,7 +60,15 @@ class HyprlandWindowManager(BaseWindowManager):
             height = int(m.get("height", 1080))
             scaled_w = int(width / max(0.1, scale))
             scaled_h = int(height / max(0.1, scale))
-            reserved = m.get("reserved", [0, 0, 0, 0])  # [top, right, bottom, left]
+            transform = int(m.get("transform", 0))
+            if transform in (1, 3, 5, 7):
+                scaled_w, scaled_h = scaled_h, scaled_w
+            # Hyprland reserved format is [top, bottom, left, right]
+            reserved = m.get("reserved", [0, 0, 0, 0])
+            top_res = reserved[0] if len(reserved) > 0 else 0
+            bottom_res = reserved[1] if len(reserved) > 1 else 0
+            left_res = reserved[2] if len(reserved) > 2 else 0
+            right_res = reserved[3] if len(reserved) > 3 else 0
             results.append({
                 "id": m.get("id", 0),
                 "name": m.get("name", ""),
@@ -56,15 +76,15 @@ class HyprlandWindowManager(BaseWindowManager):
                 "raw_width": width,
                 "raw_height": height,
                 "scale": scale,
-                "transform": m.get("transform", 0),
+                "transform": transform,
                 "focused": bool(m.get("focused", False)),
                 "is_primary": bool(m.get("focused", False)),
-                "reserved": reserved,
+                "reserved": [top_res, bottom_res, left_res, right_res],
                 "work_area": [
-                    m.get("x", 0) + reserved[3],
-                    m.get("y", 0) + reserved[0],
-                    scaled_w - reserved[3] - reserved[1],
-                    scaled_h - reserved[0] - reserved[2],
+                    m.get("x", 0) + left_res,
+                    m.get("y", 0) + top_res,
+                    scaled_w - left_res - right_res,
+                    scaled_h - top_res - bottom_res,
                 ],
             })
         return results
@@ -293,18 +313,20 @@ class HyprlandWindowManager(BaseWindowManager):
         st = state.lower().strip()
 
         if st in ["maximize", "fullscreen"]:
+            self.focus_window(addr)
             self.ipc.dispatch("fullscreen", "1")
         elif st in ["minimize"]:
             # Move to special hidden scratchpad workspace in Hyprland
             self.ipc.dispatch("movetoworkspacesilent", f"special:minimized,address:{addr}")
         elif st in ["restore"]:
-            # Toggle fullscreen off or bring back from special workspace
+            # Focus and toggle fullscreen off or bring back from special workspace
+            self.focus_window(addr)
             if win.get("fullscreen"):
                 self.ipc.dispatch("fullscreen", "0")
             elif win.get("is_minimized"):
                 active_ws = self.ipc.get_active_workspace().get("id", 1)
                 self.ipc.dispatch("movetoworkspace", f"{active_ws},address:{addr}")
-            self.focus_window(addr)
+                self.focus_window(addr)
         else:
             return {"status": "error", "message": f"Unknown state: '{state}'"}
 

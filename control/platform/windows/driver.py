@@ -149,11 +149,29 @@ class WindowsScreenCapture(BaseScreenCapture):
 
     def capture_screen(self, max_dim: Optional[int] = None, quality: int = 80) -> Tuple[Image.Image, Tuple[int, int, int, int]]:
         from perception.screen_capture import capture_screen
-        return capture_screen(max_dim=max_dim, quality=quality)
+        from control.mouse_engine import get_virtual_screen_bounds
+        bounds = get_virtual_screen_bounds()
+        img = capture_screen()
+        if max_dim is not None and max(img.width, img.height) > max_dim:
+            scale = max_dim / float(max(img.width, img.height))
+            new_w = max(1, int(img.width * scale))
+            new_h = max(1, int(img.height * scale))
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        return img, bounds
 
     def capture_window(self, query: str, max_dim: Optional[int] = None, quality: int = 80) -> Tuple[Optional[Image.Image], Optional[Tuple[int, int, int, int]]]:
-        from perception.screen_capture import capture_window
-        return capture_window(query, max_dim=max_dim, quality=quality)
+        from perception.screen_capture import capture_window, find_window, get_window_extended_bounds
+        win = find_window(query)
+        if not win:
+            return None, None
+        img = capture_window(win["hwnd"])
+        bounds = get_window_extended_bounds(win["hwnd"])
+        if max_dim is not None and max(img.width, img.height) > max_dim:
+            scale = max_dim / float(max(img.width, img.height))
+            new_w = max(1, int(img.width * scale))
+            new_h = max(1, int(img.height * scale))
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        return img, bounds
 
     def get_raw_frame(self, target: Optional[str] = None) -> Tuple[Image.Image, Tuple[int, int, int, int]]:
         return self._get_manager().get_raw_frame(target=target)

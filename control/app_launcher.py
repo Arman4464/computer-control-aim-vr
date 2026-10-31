@@ -196,14 +196,7 @@ def launch_application(name: str, args: Optional[str] = None, timeout: float = 3
     """
     Launches an application and waits for its top-level window to appear.
     """
-    if not IS_WINDOWS:
-        try:
-            from control.platform import get_platform_driver
-            return get_platform_driver().launcher.launch_app(name, args=args)
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
-
-    # If name is a URL or file with extension not ending in .exe, use shell_execute
+    # If name is a URL or file with extension not ending in .exe, use shell_execute (routes to xdg-open on Linux)
     if (
         name.startswith("http://")
         or name.startswith("https://")
@@ -211,6 +204,13 @@ def launch_application(name: str, args: Optional[str] = None, timeout: float = 3
         or (os.path.isfile(name) and not name.lower().endswith(".exe"))
     ):
         return shell_execute(name, args)
+
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            return get_platform_driver().launcher.launch_app(name, args=args)
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
 
     binary = resolve_binary_path(name) or shutil.which(name) or shutil.which(f"{name}.exe")
     target_cmd = binary if binary else name

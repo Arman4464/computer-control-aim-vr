@@ -231,6 +231,11 @@ class BasePlatformDriver(ABC):
         self.launcher: BaseAppLauncher = None
         self.safety: BaseSafety = None
 
+    @property
+    def app_launcher(self) -> BaseAppLauncher:
+        """Alias for launcher subsystem."""
+        return self.launcher
+
     def get_platform_name(self) -> str:
         """Returns string identifier of the platform."""
         return self.name

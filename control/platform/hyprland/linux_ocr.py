@@ -160,12 +160,85 @@ class LinuxOcrEngine:
 
         return words, list(lines_map.values()), " ".join(all_words_text)
 
-    def find_text(self, image: Image.Image, query: str, fuzzy: bool = True) -> List[Dict[str, Any]]:
+    def find_text(self, image: Image.Image, query: str) -> Optional[Dict[str, Any]]:
         """
-        Locates query text or phrase in image.
+        Searches for `query` in the image, returning the single best match dict
+        conforming to WinRtOcrEngine schema:
+            {"text": str, "bbox": [x, y, w, h], "center": [cx, cy], "confidence": float}
+        """
+        query_norm = query.strip().lower()
+        if not query_norm:
+            return None
+
+        ocr_res = self.recognize(image)
+        if ocr_res.get("status") not in ("ok", "success"):
+            return None
+
+        words = ocr_res.get("words", [])
+        if not words:
+            return None
+
+        # 1. Exact single word match
+        for w in words:
+            if w["text"].strip().lower() == query_norm:
+                return {
+                    "text": w["text"],
+                    "bbox": [w["x"], w["y"], w["w"], w["h"]],
+                    "center": [w["x"] + w["w"] // 2, w["y"] + w["h"] // 2],
+                    "confidence": 1.0,
+                }
+
+        # 2. Multi-word phrase search across sequential words on same line
+        query_tokens = query_norm.split()
+        if len(query_tokens) > 1:
+            for i in range(len(words) - len(query_tokens) + 1):
+                slice_words = words[i : i + len(query_tokens)]
+                slice_text = " ".join(sw["text"] for sw in slice_words)
+                slice_lower = " ".join(sw["text"].strip().lower() for sw in slice_words)
+                if query_norm in slice_lower or all(qt in slice_lower for qt in query_tokens):
+                    min_x = min(sw["x"] for sw in slice_words)
+                    min_y = min(sw["y"] for sw in slice_words)
+                    max_x = max(sw["x"] + sw["w"] for sw in slice_words)
+                    max_y = max(sw["y"] + sw["h"] for sw in slice_words)
+                    w_box = max_x - min_x
+                    h_box = max_y - min_y
+                    return {
+                        "text": slice_text,
+                        "bbox": [min_x, min_y, w_box, h_box],
+                        "center": [min_x + w_box // 2, min_y + h_box // 2],
+                        "confidence": 0.95,
+                    }
+
+            # Check full lines
+            for line in ocr_res.get("lines", []):
+                if query_norm in line["text"].lower():
+                    b = line["bbox"]
+                    return {
+                        "text": line["text"],
+                        "bbox": b,
+                        "center": [b[0] + b[2] // 2, b[1] + b[3] // 2],
+                        "confidence": 0.90,
+                    }
+
+        # 3. Substring in single word (e.g. "Download" in "Downloads")
+        for w in words:
+            word_clean = w["text"].strip().lower()
+            if query_norm in word_clean or (len(word_clean) >= 4 and len(query_tokens) == 1 and word_clean in query_norm):
+                return {
+                    "text": w["text"],
+                    "bbox": [w["x"], w["y"], w["w"], w["h"]],
+                    "center": [w["x"] + w["w"] // 2, w["y"] + w["h"] // 2],
+                    "confidence": 0.85,
+                }
+
+        return None
+
+    def find_all_text(self, image: Image.Image, query: str) -> List[Dict[str, Any]]:
+        """
+        Locates all occurrences of query text in image lines and words.
         """
         res = self.recognize_text(image)
-        if res.get("status") != "success":
+        if res.get("status") not in ("ok", "success"):
             return []
 
         q_lower = query.lower().strip()
@@ -182,15 +255,16 @@ class LinuxOcrEngine:
                 })
 
         # 2. Check individual words
-        if not matches:
-            for word in res.get("words", []):
-                if q_lower in word["text"].lower():
-                    matches.append({
-                        "text": word["text"],
-                        "bbox": word["bbox"],
-                        "center": word["center"],
-                        "type": "word",
-                    })
+        for word in res.get("words", []):
+            if q_lower in word["text"].lower():
+                matches.append({
+                    "text": word["text"],
+                    "bbox": word["bbox"],
+                    "center": word["center"],
+                    "type": "word",
+                })
+
+        return matches
 
     def recognize(self, image: Image.Image) -> Dict[str, Any]:
         """Recognize alias matching WinRtOcrEngine interface."""

@@ -181,10 +181,13 @@ def capture_screen(bbox: Optional[Tuple[int, int, int, int]] = None) -> Image.Im
     if not IS_WINDOWS:
         try:
             from control.platform import get_platform_driver
-            img, _ = get_platform_driver().capture.capture_screen()
+            img, bounds = get_platform_driver().capture.capture_screen()
             if bbox:
                 x, y, w, h = bbox
-                img = img.crop((x, y, x + w, y + h))
+                vx, vy = bounds[0], bounds[1]
+                rel_x = max(0, x - vx)
+                rel_y = max(0, y - vy)
+                img = img.crop((rel_x, rel_y, min(img.width, rel_x + w), min(img.height, rel_y + h)))
             return img
         except Exception:
             return Image.new("RGB", (1920, 1080), color=(30, 30, 46))

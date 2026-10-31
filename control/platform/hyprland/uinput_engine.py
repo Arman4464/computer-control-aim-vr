@@ -283,12 +283,20 @@ class UInputEngine(BaseInputEngine):
             sys.stderr.write(f"[UInputEngine] evdev /dev/uinput initialization failed: {e}\n")
 
     def _get_button_code(self, button: str) -> int:
-        btn = button.lower()
+        btn = button.lower().strip()
         if btn == "right":
             return BTN_RIGHT
         elif btn == "middle":
             return BTN_MIDDLE
         return BTN_LEFT
+
+    def _get_ydotool_btn(self, button: str) -> int:
+        btn = button.lower().strip()
+        if btn == "right":
+            return 0x01
+        elif btn == "middle":
+            return 0x02
+        return 0x00
 
     def move_cursor(self, x: int, y: int) -> Tuple[int, int]:
         """
@@ -328,6 +336,12 @@ class UInputEngine(BaseInputEngine):
                 self._cursor_x = int(cursor_info["x"])
                 self._cursor_y = int(cursor_info["y"])
                 return self._cursor_x, self._cursor_y
+            elif isinstance(cursor_info, str) and "," in cursor_info:
+                clean = cursor_info.replace("at:", "").strip()
+                px, py = clean.split(",", 1)
+                self._cursor_x = int(px.strip())
+                self._cursor_y = int(py.strip())
+                return self._cursor_x, self._cursor_y
         except Exception:
             pass
         return self._cursor_x, self._cursor_y
@@ -343,10 +357,11 @@ class UInputEngine(BaseInputEngine):
             self._uinput_device.syn()
             return self.get_position()
 
-        # Fallback: ydotool
+        # Fallback: ydotool (0x40 = down)
         if shutil.which("ydotool"):
-            mask = "0x00" if button == "left" else ("0x01" if button == "right" else "0x02")
-            subprocess.run(["ydotool", "click", f"{mask}0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            btn_id = self._get_ydotool_btn(button)
+            mask = hex(0x40 | btn_id)
+            subprocess.run(["ydotool", "click", mask], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         return self.get_position()
 
@@ -361,16 +376,27 @@ class UInputEngine(BaseInputEngine):
             self._uinput_device.syn()
             return self.get_position()
 
-        # Fallback: ydotool
+        # Fallback: ydotool (0x80 = up)
         if shutil.which("ydotool"):
-            mask = "0x00" if button == "left" else ("0x01" if button == "right" else "0x02")
-            subprocess.run(["ydotool", "click", f"{mask}1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            btn_id = self._get_ydotool_btn(button)
+            mask = hex(0x80 | btn_id)
+            subprocess.run(["ydotool", "click", mask], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         return self.get_position()
 
     def click(self, x: Optional[int] = None, y: Optional[int] = None, button: str = "left", clicks: int = 1) -> Tuple[int, int]:
         if x is not None and y is not None:
             self.move_cursor(x, y)
+
+        # Direct ydotool atomic click fallback (0xC0 = down | up)
+        if not self._uinput_device and shutil.which("ydotool"):
+            btn_id = self._get_ydotool_btn(button)
+            mask = hex(0xC0 | btn_id)
+            for i in range(max(1, clicks)):
+                if i > 0:
+                    time.sleep(0.04)
+                subprocess.run(["ydotool", "click", mask], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return self.get_position()
 
         for _ in range(max(1, clicks)):
             self.mouse_down(button=button)
@@ -409,10 +435,13 @@ class UInputEngine(BaseInputEngine):
             self._uinput_device.syn()
             return
 
-        # Fallback: ydotool
+        # Fallback: ydotool mousemove -w -- 0 <vert_steps>
         if shutil.which("ydotool"):
-            direction = "-b" if clicks < 0 else ""
-            subprocess.run(["ydotool", "click", "0x08"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            vert_steps = -int(clicks)
+            subprocess.run(
+                ["ydotool", "mousemove", "-w", "--", "0", str(vert_steps)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
 
     def key_down(self, key: str) -> None:
         clean = key.lower().strip()
@@ -470,7 +499,7 @@ class UInputEngine(BaseInputEngine):
         # Method 1: wtype (Standard on Arch Wayland / Hyprland)
         if shutil.which("wtype"):
             try:
-                subprocess.run(["wtype", "-d", str(int(interval * 1000)), text], timeout=10.0, check=True)
+                subprocess.run(["wtype", "-d", str(int(interval * 1000)), "--", text], timeout=10.0, check=True)
                 return
             except Exception:
                 pass
@@ -478,7 +507,7 @@ class UInputEngine(BaseInputEngine):
         # Method 2: ydotool
         if shutil.which("ydotool"):
             try:
-                subprocess.run(["ydotool", "type", "-d", str(int(interval * 1000)), text], timeout=10.0, check=True)
+                subprocess.run(["ydotool", "type", "-d", str(int(interval * 1000)), "--", text], timeout=10.0, check=True)
                 return
             except Exception:
                 pass

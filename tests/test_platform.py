@@ -74,6 +74,32 @@ class TestPlatformFactory(unittest.TestCase):
         set_platform_driver(original)
         self.assertEqual(get_platform_driver(), original)
 
+    @patch("perception.screen_capture.capture_screen")
+    @patch("perception.screen_capture.capture_window")
+    @patch("perception.screen_capture.find_window")
+    @patch("control.mouse_engine.get_virtual_screen_bounds")
+    def test_windows_driver_capture_screen_and_window(self, mock_bounds, mock_find, mock_cap_win, mock_cap_screen):
+        mock_bounds.return_value = (0, 0, 1920, 1080)
+        mock_cap_screen.return_value = Image.new("RGB", (1920, 1080), color=(10, 20, 30))
+        mock_find.return_value = {"hwnd": 1234}
+        mock_cap_win.return_value = Image.new("RGB", (800, 600), color=(50, 60, 70))
+
+        driver = WindowsPlatformDriver()
+
+        # Capture screen
+        img, bounds = driver.capture.capture_screen()
+        self.assertEqual(bounds, (0, 0, 1920, 1080))
+        self.assertEqual(img.size, (1920, 1080))
+
+        # Capture screen with max_dim downscaling
+        img_scaled, _ = driver.capture.capture_screen(max_dim=960)
+        self.assertEqual(img_scaled.size, (960, 540))
+
+        # Capture window
+        win_img, win_bounds = driver.capture.capture_window("notepad")
+        self.assertIsNotNone(win_img)
+        self.assertEqual(win_img.size, (800, 600))
+
 
 class TestHyprlandIPC(unittest.TestCase):
     """Verifies UNIX domain socket IPC querying, fallback, and dispatch."""
@@ -137,12 +163,24 @@ class TestHyprlandIPC(unittest.TestCase):
             self.assertIn("ok", res)
             mock_sock.sendall.assert_called_with(b"dispatch workspace 2")
 
+    @patch("os.path.isdir", return_value=True)
+    @patch("os.listdir", return_value=["auto_discovered_sig"])
+    @patch("os.path.exists", return_value=True)
+    @patch("os.path.getmtime", return_value=123456.7)
+    def test_auto_detect_signature(self, mock_mtime, mock_exists, mock_listdir, mock_isdir):
+        client = HyprlandIPCClient(signature=None)
+        sig = client._detect_signature()
+        self.assertEqual(sig, "auto_discovered_sig")
+        self.assertIn("auto_discovered_sig", client.command_socket_path)
+
 
 class TestUInputEngine(unittest.TestCase):
     """Verifies virtual Linux input engine, scancodes, and fallbacks."""
 
     def setUp(self):
         self.engine = UInputEngine()
+        self.engine.ipc = MagicMock()
+        self.engine.ipc.query_json.return_value = {"x": 0, "y": 0}
 
     def test_scancode_mappings(self):
         self.assertEqual(KEY_MAP_NAME_TO_CODE["enter"], 28)
@@ -184,6 +222,44 @@ class TestUInputEngine(unittest.TestCase):
         cx, cy = self.engine.click(500, 300, button="left", clicks=1)
         self.assertEqual(cx, 500)
         self.assertEqual(cy, 300)
+        mock_run.assert_called_with(["ydotool", "click", "0xc0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    @patch("shutil.which")
+    @patch("subprocess.run")
+    def test_ydotool_scroll_and_click_masks(self, mock_run, mock_which):
+        mock_which.side_effect = lambda tool: "/usr/bin/" + tool if tool == "ydotool" else None
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_run.return_value = mock_proc
+
+        self.engine._uinput_device = None
+
+        # Test scroll up (clicks=5) -> vert_steps = -5
+        self.engine.scroll(5)
+        mock_run.assert_called_with(
+            ["ydotool", "mousemove", "-w", "--", "0", "-5"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+
+        # Test mouse down right (0x41)
+        self.engine.mouse_down(button="right")
+        mock_run.assert_called_with(
+            ["ydotool", "click", "0x41"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+
+        # Test mouse up right (0x81)
+        self.engine.mouse_up(button="right")
+        mock_run.assert_called_with(
+            ["ydotool", "click", "0x81"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+
+    def test_cursorpos_string_parsing(self):
+        self.engine.ipc = MagicMock()
+        self.engine.ipc.query_json.return_value = "at: 1024, 768"
+        pos = self.engine.get_position()
+        self.assertEqual(pos, (1024, 768))
 
 
 class TestHyprlandCapture(unittest.TestCase):
@@ -282,6 +358,43 @@ class TestHyprlandWindowManager(unittest.TestCase):
         self.assertTrue(any("togglefloating" in cmd for cmd in dispatch_calls))
         self.assertTrue(any("resizewindowpixel" in cmd for cmd in dispatch_calls))
         self.assertTrue(any("movewindowpixel" in cmd for cmd in dispatch_calls))
+
+    def test_monitor_transform_portrait_and_reserved_work_area(self):
+        # Monitor with transform=1 (90 deg rotation), width=1920, height=1080 -> dimensions swap: 1080x1920
+        # reserved is [top=40, bottom=20, left=10, right=30]
+        self.mock_ipc.get_monitors.return_value = [
+            {
+                "id": 1,
+                "name": "DP-2",
+                "x": 1920,
+                "y": 0,
+                "width": 1920,
+                "height": 1080,
+                "scale": 1.0,
+                "transform": 1,
+                "focused": False,
+                "reserved": [40, 20, 10, 30],
+            }
+        ]
+        monitors = self.wm.list_monitors()
+        self.assertEqual(len(monitors), 1)
+        m = monitors[0]
+        self.assertEqual(m["bounds"], [1920, 0, 1080, 1920])
+        # work_area: [x + left, y + top, w - left - right, h - top - bottom]
+        # x = 1920 + 10 = 1930
+        # y = 0 + 40 = 40
+        # w = 1080 - 10 - 30 = 1040
+        # h = 1920 - 40 - 20 = 1860
+        self.assertEqual(m["work_area"], [1930, 40, 1040, 1860])
+
+    def test_set_state_focuses_window_before_fullscreen(self):
+        self.mock_ipc.get_clients.return_value = [
+            {"address": "0x9999", "title": "Editor", "initialClass": "editor"}
+        ]
+        self.wm.set_state("Editor", "maximize")
+        calls = [c[0] for c in self.mock_ipc.dispatch.call_args_list]
+        self.assertEqual(calls[0], ("focuswindow", "address:0x9999"))
+        self.assertEqual(calls[1], ("fullscreen", "1"))
 
 
 class TestLinuxSubsystems(unittest.TestCase):
@@ -392,6 +505,71 @@ class TestLinuxOCR(unittest.TestCase):
         self.assertEqual(words[0]["x"], 100)
         self.assertEqual(words[0]["y"], 150)
         self.assertEqual(words[1]["text"], "Window")
+
+    @patch("shutil.which", return_value="/usr/bin/tesseract")
+    @patch("subprocess.Popen")
+    @patch("subprocess.run")
+    def test_find_text_exact_and_phrase(self, mock_run, mock_popen, mock_which):
+        ocr = LinuxOCR()
+        sample_tsv = (
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n"
+            "5\t1\t1\t1\t1\t1\t100\t150\t80\t30\t95\tDownloads\n"
+            "5\t1\t1\t1\t1\t2\t190\t150\t60\t30\t92\tFolder\n"
+        )
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_run.return_value = mock_proc
+
+        mock_popen_proc = MagicMock()
+        mock_popen_proc.returncode = 0
+        mock_popen_proc.communicate.return_value = (sample_tsv.encode("utf-8"), b"")
+        mock_popen.return_value = mock_popen_proc
+
+        test_img = Image.new("RGB", (400, 300), color=(255, 255, 255))
+
+        # 1. Single word match
+        match = ocr.find_text(test_img, "Downloads")
+        self.assertIsNotNone(match)
+        self.assertEqual(match["text"], "Downloads")
+        self.assertEqual(match["bbox"], [100, 150, 80, 30])
+        self.assertEqual(match["center"], [140, 165])
+
+        # 2. Multi-word phrase match
+        phrase_match = ocr.find_text(test_img, "Downloads Folder")
+        self.assertIsNotNone(phrase_match)
+        self.assertEqual(phrase_match["text"], "Downloads Folder")
+        self.assertEqual(phrase_match["bbox"], [100, 150, 150, 30])
+
+        # 3. Non-matching string
+        no_match = ocr.find_text(test_img, "NonExistentString")
+        self.assertIsNone(no_match)
+
+        # 4. Find all text matches
+        all_matches = ocr.find_all_text(test_img, "Folder")
+        self.assertEqual(len(all_matches), 2)  # line + word
+
+    def test_app_launcher_routes_url(self):
+        from control.app_launcher import launch_application
+        with patch("control.app_launcher.IS_WINDOWS", False):
+            with patch("control.platform.get_platform_driver") as mock_get_driver:
+                mock_driver = MagicMock()
+                mock_get_driver.return_value = mock_driver
+                mock_driver.launcher.open_file_or_url.return_value = {"status": "opened"}
+
+                res = launch_application("https://archlinux.org")
+                self.assertEqual(res["status"], "opened")
+                mock_driver.launcher.open_file_or_url.assert_called_with("https://archlinux.org")
+
+    def test_pinned_window_on_hyprland_workspace(self):
+        from control.vdm import VirtualDesktopManager
+        vdm = VirtualDesktopManager()
+        with patch("control.vdm.IS_WINDOWS", False):
+            with patch("control.platform.hyprland.hyprland_ipc.default_hyprland_ipc.get_active_workspace", return_value={"id": 1}):
+                with patch("control.platform.hyprland.hyprland_ipc.default_hyprland_ipc.get_clients", return_value=[
+                    {"address": "0xpinned", "workspace": {"id": 2}, "pinned": True}
+                ]):
+                    is_on = vdm.is_window_on_current_desktop("0xpinned")
+                    self.assertTrue(is_on)
 
 
 if __name__ == "__main__":
