@@ -1,10 +1,10 @@
 """
 High-Performance Win32 Keyboard Engine using SendInput with Hardware Scan Codes
-(KEYEVENTF_SCANCODE) for hotkeys and Unicode (KEYEVENTF_UNICODE) for text typing.
+(KEYEVENTF_SCANCODE) for hotkeys and Unicode (KEYEVENTF_UNICODE) for text typing,
+with cross-platform driver abstraction.
 """
 
 import ctypes
-from ctypes import wintypes
 import time
 import sys
 from control.mouse_engine import (
@@ -12,16 +12,19 @@ from control.mouse_engine import (
     KEYBDINPUT,
     INPUT_KEYBOARD,
     ULONG_PTR,
-    user32
+    user32,
+    IS_WINDOWS,
 )
 from control.safety import default_governor
 
-user32.VkKeyScanW.argtypes = [wintypes.WCHAR]
-user32.VkKeyScanW.restype = ctypes.c_short
-user32.MapVirtualKeyW.argtypes = [ctypes.c_uint, ctypes.c_uint]
-user32.MapVirtualKeyW.restype = ctypes.c_uint
-user32.keybd_event.argtypes = [ctypes.c_ubyte, ctypes.c_ubyte, wintypes.DWORD, ULONG_PTR]
-user32.keybd_event.restype = None
+if IS_WINDOWS:
+    from ctypes import wintypes
+    user32.VkKeyScanW.argtypes = [wintypes.WCHAR]
+    user32.VkKeyScanW.restype = ctypes.c_short
+    user32.MapVirtualKeyW.argtypes = [ctypes.c_uint, ctypes.c_uint]
+    user32.MapVirtualKeyW.restype = ctypes.c_uint
+    user32.keybd_event.argtypes = [ctypes.c_ubyte, ctypes.c_ubyte, wintypes.DWORD, ULONG_PTR]
+    user32.keybd_event.restype = None
 
 # Win32 Keyboard Event Flags
 KEYEVENTF_KEYDOWN = 0x0000
@@ -74,9 +77,9 @@ VK_MAP = {
     "home": 0x24,
     "end": 0x23,
     "pageup": 0x21,
+    "page_up": 0x21,
     "pagedown": 0x22,
-    "pgup": 0x21,
-    "pgdn": 0x22,
+    "page_down": 0x22,
     "left": 0x25,
     "up": 0x26,
     "right": 0x27,
@@ -87,65 +90,79 @@ VK_MAP = {
     "f5": 0x74, "f6": 0x75, "f7": 0x76, "f8": 0x77,
     "f9": 0x78, "f10": 0x79, "f11": 0x7A, "f12": 0x7B,
 
-    # Punctuation & Symbols (OEM keys)
-    ".": 0xBE, "period": 0xBE, "dot": 0xBE,
-    ",": 0xBC, "comma": 0xBC,
-    "-": 0xBD, "minus": 0xBD, "dash": 0xBD,
-    "=": 0xBB, "equal": 0xBB, "equals": 0xBB, "plus": 0xBB,
-    ";": 0xBA, "semicolon": 0xBA,
-    "/": 0xBF, "slash": 0xBF, "forward_slash": 0xBF,
-    "`": 0xC0, "backtick": 0xC0, "grave": 0xC0,
-    "[": 0xDB, "open_bracket": 0xDB, "bracket_left": 0xDB,
-    "\\": 0xDC, "backslash": 0xDC,
-    "]": 0xDD, "close_bracket": 0xDD, "bracket_right": 0xDD,
-    "'": 0xDE, "quote": 0xDE, "single_quote": 0xDE, "apostrophe": 0xDE,
+    # Media Keys
+    "volume_mute": 0xAD,
+    "volume_down": 0xAE,
+    "volume_up": 0xAF,
+    "media_next_track": 0xB0,
+    "media_prev_track": 0xB1,
+    "media_stop": 0xB2,
+    "media_play_pause": 0xB3,
 }
 
-# Extended keys that require KEYEVENTF_EXTENDEDKEY flag
+# Win32 Extended Keys requiring KEYEVENTF_EXTENDEDKEY flag
 EXTENDED_VKS = {
-    0x25, 0x26, 0x27, 0x28,  # Arrows: Left, Up, Right, Down
-    0x2D, 0x2E,              # Insert, Delete
-    0x24, 0x23,              # Home, End
-    0x21, 0x22,              # PageUp, PageDown
-    0x5B, 0x5C,              # Left/Right Win
-    0xA3, 0xA5,              # Right Ctrl, Right Alt
-    0x2C,                    # PrintScreen
-    0x90,                    # NumLock
-    0x6F,                    # Divide
+    0x2D,  # VK_INSERT
+    0x2E,  # VK_DELETE
+    0x24,  # VK_HOME
+    0x23,  # VK_END
+    0x21,  # VK_PRIOR (PageUp)
+    0x22,  # VK_NEXT (PageDown)
+    0x25,  # VK_LEFT
+    0x26,  # VK_UP
+    0x27,  # VK_RIGHT
+    0x28,  # VK_DOWN
+    0x5B,  # VK_LWIN
+    0x5C,  # VK_RWIN
+    0xA3,  # VK_RCONTROL
+    0xA5,  # VK_RMENU (Right Alt)
+    0x2C,  # VK_SNAPSHOT (PrintScreen)
+    0x6F,  # VK_DIVIDE (Numpad /)
 }
 
 
-def _send_key_input(vk: int, scan: int, flags: int):
-    """Sends a single keyboard event via SendInput with both VK and scan code preserved."""
+def _send_key_input(wVk: int, wScan: int, dwFlags: int):
+    """Sends a raw KEYBDINPUT event via SendInput."""
+    if not IS_WINDOWS:
+        return
+
     inp = INPUT()
     inp.type = INPUT_KEYBOARD
-    inp.u.ki.wVk = vk
-    inp.u.ki.wScan = scan
-    inp.u.ki.dwFlags = flags
+    inp.u.ki.wVk = wVk
+    inp.u.ki.wScan = wScan
+    inp.u.ki.dwFlags = dwFlags
     inp.u.ki.time = 0
     inp.u.ki.dwExtraInfo = 0
+
     sent = user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
     if sent != 1:
-        # Fallback to user32.keybd_event to bypass background UIPI blocks
-        user32.keybd_event(vk, scan, flags, 0)
+        # Fallback to keybd_event to bypass UIPI blocks
+        user32.keybd_event(wVk, wScan, dwFlags, 0)
 
 
 def get_vk_and_scan(key_name: str) -> tuple[int, int, bool]:
     """
-    Resolves key name into (vk_code, scan_code, is_extended).
-    Accurately maps alphanumeric keys, punctuation symbols, and special keys.
+    Translates a human-readable key name (e.g. 'ctrl', 'enter', 'a', 'F5')
+    into (VirtualKeyCode, HardwareScanCode, IsExtended).
     """
-    clean_name = key_name.lower().strip()
-    if clean_name in VK_MAP:
-        vk = VK_MAP[clean_name]
-    elif len(clean_name) == 1:
-        if "a" <= clean_name <= "z" or "0" <= clean_name <= "9":
-            vk = ord(clean_name.upper())
+    if not IS_WINDOWS:
+        return 0, 0, False
+
+    clean_key = key_name.lower().strip()
+
+    if clean_key in VK_MAP:
+        vk = VK_MAP[clean_key]
+    elif len(clean_key) == 1:
+        ch = clean_key[0]
+        if "a" <= ch <= "z":
+            vk = ord(ch.upper())
+        elif "0" <= ch <= "9":
+            vk = ord(ch)
         else:
-            # Punctuation/symbol conversion via Windows VkKeyScanW
-            vks = user32.VkKeyScanW(ord(clean_name))
-            if vks != -1 and vks != 0xFFFF:
-                vk = vks & 0xFF
+            # Punctuation/symbol: look up via VkKeyScanW
+            res = user32.VkKeyScanW(ch)
+            if res != -1:
+                vk = res & 0xFF
             else:
                 raise ValueError(f"Unknown key or unmappable symbol: {key_name}")
     else:
@@ -163,6 +180,14 @@ class KeyboardEngine:
         self.governor = governor or default_governor
 
     def _raw_key_down(self, key_name: str):
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                get_platform_driver().input.key_down(key_name)
+            except Exception:
+                pass
+            return
+
         vk, scan, is_ext = get_vk_and_scan(key_name)
         flags = KEYEVENTF_SCANCODE if scan != 0 else 0
         if is_ext:
@@ -170,6 +195,14 @@ class KeyboardEngine:
         _send_key_input(vk, scan, flags)
 
     def _raw_key_up(self, key_name: str):
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                get_platform_driver().input.key_up(key_name)
+            except Exception:
+                pass
+            return
+
         vk, scan, is_ext = get_vk_and_scan(key_name)
         flags = (KEYEVENTF_SCANCODE if scan != 0 else 0) | KEYEVENTF_KEYUP
         if is_ext:
@@ -189,6 +222,16 @@ class KeyboardEngine:
     def press_key(self, key_name: str, duration: float = 0.02):
         """Presses and releases a single key."""
         self.governor.pre_action()
+
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                get_platform_driver().input.press_key(key_name)
+            except Exception:
+                pass
+            self.governor.post_action()
+            return
+
         # For single printable non-alphanumeric characters, send via Unicode input for 100% fidelity without shift loss
         if len(key_name) == 1 and not ("a" <= key_name.lower() <= "z" or "0" <= key_name <= "9"):
             utf16_bytes = key_name.encode("utf-16-le")
@@ -205,6 +248,8 @@ class KeyboardEngine:
 
     def _release_all_modifiers(self):
         """Universal failsafe: ensure all standard modifiers are physically released."""
+        if not IS_WINDOWS:
+            return
         EXTENDED_MODS = {0x5B, 0x5C, 0xA3, 0xA5}
         for mod_vk in (0x11, 0xA2, 0xA3, 0x12, 0xA4, 0xA5, 0x10, 0xA0, 0xA1, 0x5B, 0x5C):
             flags = KEYEVENTF_KEYUP
@@ -219,6 +264,16 @@ class KeyboardEngine:
         Example: hotkey("ctrl", "shift", "p") or hotkey("win", "r")
         """
         self.governor.pre_action()
+
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                get_platform_driver().input.hotkey(*keys)
+            except Exception:
+                pass
+            self.governor.post_action()
+            return
+
         pressed_keys = []
         try:
             for k in keys:
@@ -245,6 +300,16 @@ class KeyboardEngine:
         regardless of active keyboard layout. Supports UTF-16 surrogate pairs (emojis).
         """
         self.governor.pre_action()
+
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                get_platform_driver().input.type_text(text, interval=interval)
+            except Exception:
+                pass
+            self.governor.post_action()
+            return
+
         self._release_all_modifiers()
         time.sleep(0.01)
 

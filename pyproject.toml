@@ -8,7 +8,7 @@ version = "3.0.0"
 authors = [
   { name = "Arman", email = "rangooniarman@gmail.com" },
 ]
-description = "Industrial SOTA Windows Computer Control & Desktop Automation System (AIM-VR 3.0)"
+description = "Industrial SOTA Windows & Arch Linux (Hyprland Wayland) Computer Control & Desktop Automation System (AIM-VR 3.0)"
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -16,6 +16,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: Microsoft :: Windows :: Windows 10",
     "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -27,7 +28,8 @@ classifiers = [
 ]
 dependencies = [
     "Pillow>=9.0.0",
-    "uiautomation>=2.0.18",
+    "uiautomation>=2.0.18; sys_platform == 'win32'",
+    "evdev>=1.6.0; sys_platform == 'linux'",
 ]
 
 [project.urls]

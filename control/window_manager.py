@@ -1,24 +1,46 @@
 """
-Windows Window Management and Layout Engine.
+Windows Window Management and Layout Engine, with multiplatform driver routing.
 Provides window state manipulation (maximize, minimize, restore),
 screen work-area snapping (left, right, top, bottom, quadrants, center),
 and precise coordinate repositioning without disrupting background apps.
 """
 
 import ctypes
-from ctypes import wintypes
 import time
 import os
 import sys
 from typing import Optional, Dict, Any, Tuple
 
-from control.safety import ensure_interactive_desktop, default_governor
+from control.safety import ensure_interactive_desktop, default_governor, IS_WINDOWS
 
-user32 = ctypes.windll.user32
-user32.GetSystemMetrics.argtypes = [ctypes.c_int]
-user32.GetSystemMetrics.restype = ctypes.c_int
-user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
-user32.ShowWindow.restype = wintypes.BOOL
+if IS_WINDOWS:
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+    user32.GetSystemMetrics.restype = ctypes.c_int
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.ShowWindow.restype = wintypes.BOOL
+
+    class MONITORINFO(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", wintypes.DWORD),
+            ("rcMonitor", wintypes.RECT),
+            ("rcWork", wintypes.RECT),
+            ("dwFlags", wintypes.DWORD),
+        ]
+
+    user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+    user32.MonitorFromWindow.restype = wintypes.HMONITOR
+    user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.c_void_p]
+    user32.GetMonitorInfoW.restype = wintypes.BOOL
+    user32.SetWindowPos.argtypes = [
+        wintypes.HWND, wintypes.HWND,
+        ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        ctypes.c_uint
+    ]
+    user32.SetWindowPos.restype = wintypes.BOOL
+else:
+    user32 = None
 
 # Win32 Constants
 SW_HIDE = 0
@@ -37,28 +59,12 @@ SWP_SHOWWINDOW = 0x0040
 
 MONITOR_DEFAULTTONEAREST = 2
 
-class MONITORINFO(ctypes.Structure):
-    _fields_ = [
-        ("cbSize", wintypes.DWORD),
-        ("rcMonitor", wintypes.RECT),
-        ("rcWork", wintypes.RECT),
-        ("dwFlags", wintypes.DWORD),
-    ]
-
-user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
-user32.MonitorFromWindow.restype = wintypes.HMONITOR
-user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.c_void_p]
-user32.GetMonitorInfoW.restype = wintypes.BOOL
-user32.SetWindowPos.argtypes = [
-    wintypes.HWND, wintypes.HWND,
-    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-    ctypes.c_uint
-]
-user32.SetWindowPos.restype = wintypes.BOOL
-
 
 def get_window_monitor_work_area(hwnd: int) -> Tuple[int, int, int, int]:
     """Returns (left, top, width, height) of the monitor work area where the window resides."""
+    if not IS_WINDOWS:
+        return 0, 0, 1920, 1080
+
     h_mon = user32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
     if not h_mon:
         # Fallback to primary screen virtual bounds
@@ -88,6 +94,12 @@ class WindowManager:
 
     def get_window(self, target: str) -> Optional[Dict[str, Any]]:
         """Resolves target substring to visible window info."""
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                return get_platform_driver().window_manager.find_window(target)
+            except Exception:
+                return None
         from perception.screen_capture import find_window
         return find_window(target)
 
@@ -96,6 +108,16 @@ class WindowManager:
         Changes window state: 'maximize', 'minimize', or 'restore'.
         """
         self.governor.pre_action()
+
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                res = get_platform_driver().window_manager.set_state(target, state)
+            except Exception as e:
+                res = {"status": "error", "message": str(e)}
+            self.governor.post_action()
+            return res
+
         win = self.get_window(target)
         if not win:
             return {"status": "error", "message": f"Window matching '{target}' not found."}
@@ -129,6 +151,16 @@ class WindowManager:
           - 'center': Centered on monitor (75% width, 80% height)
         """
         self.governor.pre_action()
+
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                res = get_platform_driver().window_manager.snap(target, position)
+            except Exception as e:
+                res = {"status": "error", "message": str(e)}
+            self.governor.post_action()
+            return res
+
         win = self.get_window(target)
         if not win:
             return {"status": "error", "message": f"Window matching '{target}' not found."}
@@ -187,6 +219,16 @@ class WindowManager:
     def move_resize(self, target: str, x: int, y: int, width: int, height: int) -> Dict[str, Any]:
         """Sets exact pixel bounds for the target window."""
         self.governor.pre_action()
+
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                res = get_platform_driver().window_manager.move_resize(target, x, y, width, height)
+            except Exception as e:
+                res = {"status": "error", "message": str(e)}
+            self.governor.post_action()
+            return res
+
         win = self.get_window(target)
         if not win:
             return {"status": "error", "message": f"Window matching '{target}' not found."}

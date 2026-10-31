@@ -1,6 +1,6 @@
 """
 Application launcher with intelligent binary resolution, ShellExecute,
-and robust window readiness polling.
+and robust window readiness polling, with cross-platform driver abstraction.
 Resolves applications via standard paths, Windows App Paths registry, system PATH,
 and opens files/URLs via default system associations.
 """
@@ -10,9 +10,7 @@ import sys
 import time
 import shutil
 import subprocess
-import winreg
 import ctypes
-from ctypes import wintypes
 from typing import Optional, Dict, Any, List
 
 # Ensure parent directory is in path
@@ -21,16 +19,24 @@ PARENT_DIR = os.path.dirname(CURRENT_DIR)
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-shell32 = ctypes.windll.shell32
-shell32.ShellExecuteW.argtypes = [
-    wintypes.HWND,
-    wintypes.LPCWSTR,
-    wintypes.LPCWSTR,
-    wintypes.LPCWSTR,
-    wintypes.LPCWSTR,
-    ctypes.c_int
-]
-shell32.ShellExecuteW.restype = wintypes.HINSTANCE
+from control.safety import IS_WINDOWS
+
+if IS_WINDOWS:
+    import winreg
+    from ctypes import wintypes
+    shell32 = ctypes.windll.shell32
+    shell32.ShellExecuteW.argtypes = [
+        wintypes.HWND,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        ctypes.c_int
+    ]
+    shell32.ShellExecuteW.restype = wintypes.HINSTANCE
+else:
+    winreg = None
+    shell32 = None
 
 # Track spawned background processes to prevent garbage-collection ResourceWarnings
 _TRACKED_PROCESSES: List[subprocess.Popen] = []
@@ -40,6 +46,7 @@ def _prune_tracked_processes():
     """Prunes terminated Popen objects from _TRACKED_PROCESSES to prevent handle leaks."""
     global _TRACKED_PROCESSES
     _TRACKED_PROCESSES = [p for p in _TRACKED_PROCESSES if p.poll() is None]
+
 
 KNOWN_APPS = {
     "chrome": [
@@ -64,18 +71,42 @@ KNOWN_APPS = {
         r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
         r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
     ],
-    "msedge": [
-        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    "firefox": [
+        r"C:\Program Files\Mozilla Firefox\firefox.exe",
+        r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe",
     ],
-    "notepad": ["notepad.exe"],
-    "calc": ["calc.exe"],
-    "calculator": ["calc.exe"],
-    "explorer": ["explorer.exe"],
-    "file explorer": ["explorer.exe"],
-    "cmd": ["cmd.exe"],
-    "powershell": ["powershell.exe"],
-    "terminal": ["wt.exe", "cmd.exe"],
+    "notepad": [
+        r"C:\Windows\System32\notepad.exe",
+        r"C:\Windows\notepad.exe",
+    ],
+    "explorer": [
+        r"C:\Windows\explorer.exe",
+    ],
+    "file explorer": [
+        r"C:\Windows\explorer.exe",
+    ],
+    "calc": [
+        r"C:\Windows\System32\calc.exe",
+    ],
+    "calculator": [
+        r"C:\Windows\System32\calc.exe",
+    ],
+    "cmd": [
+        r"C:\Windows\System32\cmd.exe",
+    ],
+    "terminal": [
+        os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WindowsApps\wt.exe"),
+    ],
+    "powershell": [
+        r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+    ],
+    "pwsh": [
+        r"C:\Program Files\PowerShell\7\pwsh.exe",
+    ],
+    "code": [
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe"),
+        r"C:\Program Files\Microsoft VS Code\Code.exe",
+    ],
     "vscode": [
         os.path.expandvars(r"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe"),
         r"C:\Program Files\Microsoft VS Code\Code.exe",
@@ -83,48 +114,72 @@ KNOWN_APPS = {
 }
 
 
+def _query_app_paths_registry(app_name: str) -> Optional[str]:
+    """Queries HKLM and HKCU App Paths for the executable path on Windows."""
+    if not IS_WINDOWS or winreg is None:
+        return None
+
+    names_to_try = [app_name]
+    if not app_name.lower().endswith(".exe"):
+        names_to_try.append(f"{app_name}.exe")
+
+    for name in names_to_try:
+        sub_key = f"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\{name}"
+        for hkey in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+            try:
+                with winreg.OpenKey(hkey, sub_key) as key:
+                    val, _ = winreg.QueryValueEx(key, "")
+                    if val and os.path.exists(val):
+                        return val
+            except (OSError, FileNotFoundError):
+                continue
+    return None
+
+
 def resolve_binary_path(name: str) -> Optional[str]:
-    """Resolves an application name to an absolute binary path or executable command."""
-    name_clean = name.strip().lower()
+    """
+    Resolves an application name/alias to a full filesystem path.
+    """
+    clean_name = name.strip()
 
-    # 1. Check known explicit paths
-    if name_clean in KNOWN_APPS:
-        for candidate in KNOWN_APPS[name_clean]:
-            if os.path.isabs(candidate) and os.path.exists(candidate):
-                return candidate
-            which_res = shutil.which(candidate)
-            if which_res:
-                return which_res
+    if os.path.isabs(clean_name) and os.path.exists(clean_name):
+        return clean_name
 
-    # 2. Check if name is already an existing path
-    if os.path.isfile(name):
-        return os.path.abspath(name)
-
-    # 3. Check Windows Registry App Paths
-    app_key_name = name if name.endswith(".exe") else f"{name}.exe"
-    for root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
-        key_path = rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{app_key_name}"
+    if not IS_WINDOWS:
         try:
-            with winreg.OpenKey(root, key_path) as key:
-                val, _ = winreg.QueryValueEx(key, "")
-                if val and os.path.isfile(val):
-                    return val
-        except OSError:
-            pass
+            from control.platform import get_platform_driver
+            return get_platform_driver().launcher.resolve_binary(clean_name)
+        except Exception:
+            return shutil.which(clean_name)
 
-    # 4. Check system PATH
-    found = shutil.which(name) or shutil.which(app_key_name)
-    if found:
-        return found
+    lower_name = clean_name.lower()
+    if lower_name in KNOWN_APPS:
+        for candidate in KNOWN_APPS[lower_name]:
+            if os.path.exists(candidate):
+                return candidate
+
+    reg_path = _query_app_paths_registry(clean_name)
+    if reg_path:
+        return reg_path
+
+    which_path = shutil.which(clean_name) or shutil.which(f"{clean_name}.exe")
+    if which_path:
+        return which_path
 
     return None
 
 
 def shell_execute(target: str, args: Optional[str] = None) -> Dict[str, Any]:
     """
-    Opens a file, directory, or URL using the Windows default shell association.
-    Equivalent to double-clicking in File Explorer or running 'start <target>'.
+    Opens a file, directory, or URL using the system default shell association.
     """
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            return get_platform_driver().launcher.open_file_or_url(target)
+        except Exception as e:
+            return {"status": "error", "message": str(e), "target": target}
+
     try:
         # SW_SHOWNORMAL = 1
         res = shell32.ShellExecuteW(None, "open", target, args, None, 1)
@@ -140,8 +195,14 @@ def shell_execute(target: str, args: Optional[str] = None) -> Dict[str, Any]:
 def launch_application(name: str, args: Optional[str] = None, timeout: float = 3.5) -> Dict[str, Any]:
     """
     Launches an application and waits for its top-level window to appear.
-    Does not block indefinitely. Returns window details upon activation.
     """
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            return get_platform_driver().launcher.launch_app(name, args=args)
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
     # If name is a URL or file with extension not ending in .exe, use shell_execute
     if (
         name.startswith("http://")

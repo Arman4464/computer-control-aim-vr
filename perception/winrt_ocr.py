@@ -35,6 +35,8 @@ class WinRtOcrEngine:
 
     def _ensure_daemon(self):
         """Starts or restarts the background PowerShell WinRT OCR worker."""
+        if sys.platform != "win32":
+            return
         if self._proc is not None and self._proc.poll() is None:
             return
 
@@ -77,6 +79,10 @@ class WinRtOcrEngine:
         Returns:
             {"status": "ok", "text": "...", "words": [{"text": str, "x": int, "y": int, "w": int, "h": int}]}
         """
+        if sys.platform != "win32":
+            from control.platform.hyprland.linux_ocr import default_linux_ocr
+            return default_linux_ocr.recognize(img)
+
         with self._lock:
             self._ensure_daemon()
 
@@ -178,6 +184,9 @@ class WinRtOcrEngine:
 
     def shutdown(self):
         """Cleanly terminates the OCR daemon process."""
+        if sys.platform != "win32":
+            return
+
         with self._lock:
             if self._proc is not None:
                 try:

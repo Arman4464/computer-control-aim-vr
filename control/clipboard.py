@@ -1,49 +1,56 @@
 """
-High-Performance Win32 Native Clipboard Bridge.
+High-Performance Win32 Native Clipboard Bridge with multiplatform driver routing.
 Provides instantaneous text retrieval, text injection, and simulated paste (Ctrl+V)
 without layout mismatches or dropped keystrokes.
 """
 
 import ctypes
-from ctypes import wintypes
 import time
 import sys
 from control.keyboard_engine import default_keyboard
-from control.safety import default_governor
+from control.safety import default_governor, IS_WINDOWS
 
-user32 = ctypes.windll.user32
-kernel32 = ctypes.windll.kernel32
+if IS_WINDOWS:
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
 
-CF_UNICODETEXT = 13
-GMEM_MOVEABLE = 0x0002
-GMEM_ZEROINIT = 0x0040
-GHND = GMEM_MOVEABLE | GMEM_ZEROINIT
+    CF_UNICODETEXT = 13
+    GMEM_MOVEABLE = 0x0002
+    GMEM_ZEROINIT = 0x0040
+    GHND = GMEM_MOVEABLE | GMEM_ZEROINIT
 
-user32.OpenClipboard.argtypes = [wintypes.HWND]
-user32.OpenClipboard.restype = wintypes.BOOL
-user32.CloseClipboard.argtypes = []
-user32.CloseClipboard.restype = wintypes.BOOL
-user32.EmptyClipboard.argtypes = []
-user32.EmptyClipboard.restype = wintypes.BOOL
-user32.GetClipboardData.argtypes = [ctypes.c_uint]
-user32.GetClipboardData.restype = wintypes.HANDLE
-user32.SetClipboardData.argtypes = [ctypes.c_uint, wintypes.HANDLE]
-user32.SetClipboardData.restype = wintypes.HANDLE
-user32.IsClipboardFormatAvailable.argtypes = [ctypes.c_uint]
-user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
+    user32.OpenClipboard.argtypes = [wintypes.HWND]
+    user32.OpenClipboard.restype = wintypes.BOOL
+    user32.CloseClipboard.argtypes = []
+    user32.CloseClipboard.restype = wintypes.BOOL
+    user32.EmptyClipboard.argtypes = []
+    user32.EmptyClipboard.restype = wintypes.BOOL
+    user32.GetClipboardData.argtypes = [ctypes.c_uint]
+    user32.GetClipboardData.restype = wintypes.HANDLE
+    user32.SetClipboardData.argtypes = [ctypes.c_uint, wintypes.HANDLE]
+    user32.SetClipboardData.restype = wintypes.HANDLE
+    user32.IsClipboardFormatAvailable.argtypes = [ctypes.c_uint]
+    user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
 
-kernel32.GlobalAlloc.argtypes = [ctypes.c_uint, ctypes.c_size_t]
-kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
-kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
-kernel32.GlobalLock.restype = ctypes.c_void_p
-kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
-kernel32.GlobalUnlock.restype = wintypes.BOOL
-kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
-kernel32.GlobalFree.restype = wintypes.HGLOBAL
+    kernel32.GlobalAlloc.argtypes = [ctypes.c_uint, ctypes.c_size_t]
+    kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
+    kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalLock.restype = ctypes.c_void_p
+    kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalUnlock.restype = wintypes.BOOL
+    kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalFree.restype = wintypes.HGLOBAL
+else:
+    user32 = None
+    kernel32 = None
+    CF_UNICODETEXT = 13
 
 
 def _open_clipboard_with_retry(max_retries: int = 5, delay: float = 0.02) -> bool:
     """Attempts to open clipboard with short retries to handle brief locks by other apps."""
+    if not IS_WINDOWS:
+        return True
     for _ in range(max_retries):
         if user32.OpenClipboard(None):
             return True
@@ -52,13 +59,20 @@ def _open_clipboard_with_retry(max_retries: int = 5, delay: float = 0.02) -> boo
 
 
 class ClipboardManager:
-    """Win32 Native Clipboard Interface."""
+    """Native Clipboard Interface."""
 
     def __init__(self, governor=None):
         self.governor = governor or default_governor
 
     def get_text(self) -> str:
         """Returns the current plain/Unicode text on the system clipboard."""
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                return get_platform_driver().clipboard.get_text()
+            except Exception:
+                return ""
+
         if not user32.IsClipboardFormatAvailable(CF_UNICODETEXT):
             return ""
 
@@ -84,6 +98,13 @@ class ClipboardManager:
 
     def set_text(self, text: str) -> bool:
         """Sets Unicode text onto the system clipboard."""
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                return get_platform_driver().clipboard.set_text(text)
+            except Exception:
+                return False
+
         if not _open_clipboard_with_retry():
             return False
 
@@ -118,10 +139,17 @@ class ClipboardManager:
     def paste(self, text: str, restore_clipboard: bool = False) -> bool:
         """
         Instantaneously injects text by copying it to clipboard and simulating Ctrl+V.
-        Orders of magnitude faster than simulating character-by-character key events
-        and completely immune to layout mismatches or dropped keystrokes.
         """
         self.governor.pre_action()
+
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                res = get_platform_driver().clipboard.paste(text, restore_clipboard=restore_clipboard)
+            except Exception:
+                res = False
+            self.governor.post_action()
+            return res
 
         old_text = None
         if restore_clipboard:

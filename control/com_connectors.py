@@ -48,6 +48,8 @@ class ExplorerCOMConnector:
     @staticmethod
     def _run_ps_json(script: str) -> Any:
         """Executes a PowerShell script and returns parsed JSON output."""
+        if sys.platform != "win32":
+            return None
         try:
             res = subprocess.run(
                 ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
@@ -103,6 +105,10 @@ class ExplorerCOMConnector:
         if not os.path.exists(abs_path):
             return {"status": "error", "message": f"Path not found: {abs_path}"}
 
+        if sys.platform != "win32":
+            from control.platform import get_platform_driver
+            return get_platform_driver().app_launcher.open_file_or_url(abs_path)
+
         escaped_abs_path = abs_path.replace('\\', '\\\\')
         ps = f"""
         $shell = New-Object -ComObject Shell.Application
@@ -155,6 +161,8 @@ class ExcelCOMConnector:
 
     @staticmethod
     def _run_ps_json(script: str) -> Any:
+        if sys.platform != "win32":
+            return None
         try:
             res = subprocess.run(
                 ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
@@ -172,6 +180,8 @@ class ExcelCOMConnector:
 
     def get_status(self) -> Dict[str, Any]:
         """Checks if Microsoft Excel is currently running and has an open workbook."""
+        if sys.platform != "win32":
+            return {"status": "unsupported_platform", "message": "Microsoft Excel COM automation is only available on Windows"}
         ps = r"""
         try {
             $excel = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")
@@ -197,6 +207,8 @@ class ExcelCOMConnector:
 
     def read_cell(self, cell_ref: str, sheet_name: Optional[str] = None) -> Dict[str, Any]:
         """Reads value and formula from a cell (e.g. 'A1', 'C15')."""
+        if sys.platform != "win32":
+            return {"status": "unsupported_platform", "message": "Microsoft Excel COM automation is only available on Windows"}
         clean_cell = _sanitize_cell_ref(cell_ref)
         clean_sheet = _sanitize_sheet_name(sheet_name)
         sheet_selector = f'$excel.Sheets.Item("{clean_sheet}")' if clean_sheet else "$excel.ActiveSheet"
@@ -224,6 +236,8 @@ class ExcelCOMConnector:
 
     def write_cell(self, cell_ref: str, value: Any, sheet_name: Optional[str] = None) -> Dict[str, Any]:
         """Writes value or formula into a cell (e.g. 'B2', '=SUM(A1:A10)')."""
+        if sys.platform != "win32":
+            return {"status": "unsupported_platform", "message": "Microsoft Excel COM automation is only available on Windows"}
         clean_cell = _sanitize_cell_ref(cell_ref)
         clean_sheet = _sanitize_sheet_name(sheet_name)
         sheet_selector = f'$excel.Sheets.Item("{clean_sheet}")' if clean_sheet else "$excel.ActiveSheet"
@@ -258,6 +272,8 @@ class ExcelCOMConnector:
         sheet_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Reads a 2D matrix of cell values starting at start_cell in a single COM call."""
+        if sys.platform != "win32":
+            return {"status": "unsupported_platform", "message": "Microsoft Excel COM automation is only available on Windows"}
         clean_cell = _sanitize_cell_ref(start_cell)
         clean_sheet = _sanitize_sheet_name(sheet_name)
         rows_clean = max(1, min(1000, int(rows)))

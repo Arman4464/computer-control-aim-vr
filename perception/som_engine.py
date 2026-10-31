@@ -31,7 +31,10 @@ from perception.screen_capture import (
     get_virtual_screen_bounds,
     window_to_screen_coords,
 )
-from perception.winrt_ocr import default_ocr
+if sys.platform == "win32":
+    from perception.winrt_ocr import default_ocr
+else:
+    from control.platform.hyprland.linux_ocr import default_linux_ocr as default_ocr
 
 
 class MarkResult(dict):

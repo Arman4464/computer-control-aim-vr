@@ -23,7 +23,7 @@ PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PACKAGE_ROOT not in sys.path:
     sys.path.insert(0, PACKAGE_ROOT)
 
-from control.safety import ensure_interactive_desktop, get_physical_cursor_pos
+from control.safety import ensure_interactive_desktop, get_physical_cursor_pos, IS_WINDOWS
 from control.mouse_engine import get_virtual_screen_bounds
 from perception.screen_capture import (
     capture_screen,
@@ -34,10 +34,12 @@ from perception.screen_capture import (
     get_window_extended_bounds,
 )
 from perception.uia_inspector import find_element_by_query
-from perception.winrt_ocr import default_ocr
+if IS_WINDOWS:
+    from perception.winrt_ocr import default_ocr
+else:
+    from control.platform.hyprland.linux_ocr import default_linux_ocr as default_ocr
 
-
-user32 = ctypes.windll.user32
+user32 = ctypes.windll.user32 if IS_WINDOWS else None
 
 
 class ElementLocator:

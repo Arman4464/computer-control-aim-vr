@@ -13,10 +13,7 @@ import sys
 from typing import Optional, Dict, Any, List, Tuple
 from PIL import Image
 
-user32 = ctypes.windll.user32
-kernel32 = ctypes.windll.kernel32
-gdi32 = ctypes.windll.gdi32
-ole32 = ctypes.windll.ole32
+IS_WINDOWS = (sys.platform == "win32")
 
 # Desktop Access Flags
 DESKTOP_READOBJECTS = 0x0001
@@ -49,75 +46,86 @@ SW_RESTORE = 9
 PW_RENDERFULLCONTENT = 2
 COINIT_MULTITHREADED = 0x0
 
-# 64-bit safe signatures
-user32.CreateDesktopW.argtypes = [
-    wintypes.LPCWSTR,
-    wintypes.LPCWSTR,
-    ctypes.c_void_p,
-    wintypes.DWORD,
-    wintypes.DWORD,
-    ctypes.c_void_p,
-]
-user32.CreateDesktopW.restype = wintypes.HANDLE
+if IS_WINDOWS:
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    gdi32 = ctypes.windll.gdi32
+    ole32 = ctypes.windll.ole32
 
-user32.OpenDesktopW.argtypes = [
-    wintypes.LPCWSTR,
-    wintypes.DWORD,
-    wintypes.BOOL,
-    wintypes.DWORD,
-]
-user32.OpenDesktopW.restype = wintypes.HANDLE
+    # 64-bit safe signatures
+    user32.CreateDesktopW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+    ]
+    user32.CreateDesktopW.restype = wintypes.HANDLE
 
-user32.SetThreadDesktop.argtypes = [wintypes.HANDLE]
-user32.SetThreadDesktop.restype = wintypes.BOOL
+    user32.OpenDesktopW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.BOOL,
+        wintypes.DWORD,
+    ]
+    user32.OpenDesktopW.restype = wintypes.HANDLE
 
-user32.GetThreadDesktop.argtypes = [wintypes.DWORD]
-user32.GetThreadDesktop.restype = wintypes.HANDLE
+    user32.SetThreadDesktop.argtypes = [wintypes.HANDLE]
+    user32.SetThreadDesktop.restype = wintypes.BOOL
 
-user32.CloseDesktop.argtypes = [wintypes.HANDLE]
-user32.CloseDesktop.restype = wintypes.BOOL
+    user32.GetThreadDesktop.argtypes = [wintypes.DWORD]
+    user32.GetThreadDesktop.restype = wintypes.HANDLE
 
-kernel32.GetCurrentThreadId.argtypes = []
-kernel32.GetCurrentThreadId.restype = wintypes.DWORD
+    user32.CloseDesktop.argtypes = [wintypes.HANDLE]
+    user32.CloseDesktop.restype = wintypes.BOOL
 
-kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.GetCurrentThreadId.argtypes = []
+    kernel32.GetCurrentThreadId.restype = wintypes.DWORD
 
-# GDI and User32 64-bit safe prototypes
-user32.GetDC.argtypes = [wintypes.HWND]
-user32.GetDC.restype = wintypes.HDC
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
 
-user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
-user32.ReleaseDC.restype = ctypes.c_int
+    # GDI and User32 64-bit safe prototypes
+    user32.GetDC.argtypes = [wintypes.HWND]
+    user32.GetDC.restype = wintypes.HDC
 
-gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
-gdi32.CreateCompatibleDC.restype = wintypes.HDC
+    user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
+    user32.ReleaseDC.restype = ctypes.c_int
 
-gdi32.CreateCompatibleBitmap.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
-gdi32.CreateCompatibleBitmap.restype = wintypes.HBITMAP
+    gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
+    gdi32.CreateCompatibleDC.restype = wintypes.HDC
 
-gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
-gdi32.SelectObject.restype = wintypes.HGDIOBJ
+    gdi32.CreateCompatibleBitmap.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
+    gdi32.CreateCompatibleBitmap.restype = wintypes.HBITMAP
 
-gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
-gdi32.DeleteObject.restype = wintypes.BOOL
+    gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
+    gdi32.SelectObject.restype = wintypes.HGDIOBJ
 
-gdi32.DeleteDC.argtypes = [wintypes.HDC]
-gdi32.DeleteDC.restype = wintypes.BOOL
+    gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
+    gdi32.DeleteObject.restype = wintypes.BOOL
 
-user32.PrintWindow.argtypes = [wintypes.HWND, wintypes.HDC, wintypes.UINT]
-user32.PrintWindow.restype = wintypes.BOOL
+    gdi32.DeleteDC.argtypes = [wintypes.HDC]
+    gdi32.DeleteDC.restype = wintypes.BOOL
 
-gdi32.GetDIBits.argtypes = [
-    wintypes.HDC,
-    wintypes.HBITMAP,
-    wintypes.UINT,
-    wintypes.UINT,
-    ctypes.c_void_p,
-    ctypes.c_void_p,
-    wintypes.UINT,
-]
-gdi32.GetDIBits.restype = ctypes.c_int
+    user32.PrintWindow.argtypes = [wintypes.HWND, wintypes.HDC, wintypes.UINT]
+    user32.PrintWindow.restype = wintypes.BOOL
+
+    gdi32.GetDIBits.argtypes = [
+        wintypes.HDC,
+        wintypes.HBITMAP,
+        wintypes.UINT,
+        wintypes.UINT,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        wintypes.UINT,
+    ]
+    gdi32.GetDIBits.restype = ctypes.c_int
+else:
+    user32 = None
+    kernel32 = None
+    gdi32 = None
+    ole32 = None
 
 
 class STARTUPINFOW(ctypes.Structure):
@@ -152,19 +160,20 @@ class PROCESS_INFORMATION(ctypes.Structure):
     ]
 
 
-kernel32.CreateProcessW.argtypes = [
-    wintypes.LPCWSTR,
-    wintypes.LPWSTR,
-    ctypes.c_void_p,
-    ctypes.c_void_p,
-    wintypes.BOOL,
-    wintypes.DWORD,
-    ctypes.c_void_p,
-    wintypes.LPCWSTR,
-    ctypes.POINTER(STARTUPINFOW),
-    ctypes.POINTER(PROCESS_INFORMATION),
-]
-kernel32.CreateProcessW.restype = wintypes.BOOL
+if IS_WINDOWS:
+    kernel32.CreateProcessW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.LPWSTR,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        wintypes.BOOL,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.LPCWSTR,
+        ctypes.POINTER(STARTUPINFOW),
+        ctypes.POINTER(PROCESS_INFORMATION),
+    ]
+    kernel32.CreateProcessW.restype = wintypes.BOOL
 
 
 class BITMAPINFOHEADER(ctypes.Structure):
@@ -205,7 +214,8 @@ class VirtualDesktopManager:
             raise ValueError(f"Unknown desktop mode '{mode}'. Choose 'interactive' or 'isolated_pip'.")
         self.desktop_mode = clean_mode
         if self.desktop_mode == "isolated_pip":
-            self.ensure_sandbox()
+            if IS_WINDOWS:
+                self.ensure_sandbox()
         sys.stderr.write(f"[VirtualDesktop] Desktop mode switched to: {self.desktop_mode}\n")
         return self.desktop_mode
 
@@ -218,6 +228,9 @@ class VirtualDesktopManager:
         Creates or opens the dedicated isolated sandbox desktop.
         Returns the HDESK handle.
         """
+        if not IS_WINDOWS:
+            return 0
+
         if self._sandbox_handle:
             return self._sandbox_handle
 
@@ -246,6 +259,9 @@ class VirtualDesktopManager:
         Executes a callable inside a dedicated clean worker thread attached to the
         isolated sandbox desktop with Multithreaded Apartment (MTA) COM.
         """
+        if not IS_WINDOWS:
+            return func(*args, **kwargs)
+
         import threading
         self.ensure_sandbox()
         result = [None]
@@ -285,6 +301,11 @@ class VirtualDesktopManager:
         Launches an application directly onto the isolated sandbox desktop using CreateProcessW.
         The window will not appear on the user's physical screen and will not receive physical clicks.
         """
+        if not IS_WINDOWS:
+            from control.platform import get_platform_driver
+            driver = get_platform_driver()
+            return driver.get_app_launcher().launch(command_line)
+
         self.ensure_sandbox()
 
         # Bind desktop string to local scope to prevent garbage collection before CreateProcessW runs
@@ -347,6 +368,9 @@ class VirtualDesktopManager:
         """
         Enumerates all top-level windows currently open inside the isolated sandbox desktop.
         """
+        if not IS_WINDOWS:
+            return []
+
         def _list():
             h_desk = self.ensure_sandbox()
             windows = []
@@ -395,6 +419,9 @@ class VirtualDesktopManager:
         """
         Captures the visual buffer of a window inside the isolated sandbox using PrintWindow.
         """
+        if not IS_WINDOWS:
+            return Image.new("RGB", (100, 100), (0, 0, 0))
+
         def _capture():
             rect = wintypes.RECT()
             user32.GetWindowRect(hwnd, ctypes.byref(rect))
@@ -450,6 +477,20 @@ class VirtualDesktopManager:
         Creates a Picture-in-Picture composite preview of all windows open in the sandbox.
         Renders them onto a simulated dark desktop background and downsamples for token efficiency.
         """
+        if not IS_WINDOWS:
+            return {
+                "status": "unsupported_platform",
+                "desktop": self.sandbox_name,
+                "mode": self.desktop_mode,
+                "windows_count": 0,
+                "rendered_windows": 0,
+                "width": canvas_width,
+                "height": canvas_height,
+                "scale": 1.0,
+                "image_b64": "",
+                "windows": [],
+                "message": "Windows PiP sandbox desktop is only available on Windows",
+            }
         import io
         import base64
 
@@ -505,6 +546,9 @@ class VirtualDesktopManager:
 
     def close_sandbox_window(self, target: str) -> bool:
         """Sends WM_CLOSE to a window inside the sandbox desktop."""
+        if not IS_WINDOWS:
+            return False
+
         target_lower = target.lower()
         windows = self.list_sandbox_windows()
         for win in windows:
@@ -519,6 +563,15 @@ class VirtualDesktopManager:
         """
         Terminates tracked sandbox processes and cleans up desktop handles.
         """
+        if not IS_WINDOWS:
+            self._tracked_pids.clear()
+            self.desktop_mode = "interactive"
+            return {
+                "status": "destroyed",
+                "desktop": self.sandbox_name,
+                "mode": "interactive",
+            }
+
         import subprocess
         # Collect any remaining processes owning windows inside the sandbox desktop
         try:

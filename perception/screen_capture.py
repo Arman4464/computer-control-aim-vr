@@ -13,84 +13,96 @@ import sys
 from typing import Optional, Tuple, Dict, Any, List
 from PIL import Image, ImageChops
 
-from control.safety import ensure_interactive_desktop, run_in_interactive_desktop
+from control.safety import ensure_interactive_desktop, run_in_interactive_desktop, IS_WINDOWS
 from control.mouse_engine import get_virtual_screen_bounds
 
-user32 = ctypes.windll.user32
-gdi32 = ctypes.windll.gdi32
-kernel32 = ctypes.windll.kernel32
+if IS_WINDOWS:
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    gdi32 = ctypes.windll.gdi32
+    kernel32 = ctypes.windll.kernel32
 
-SRCCOPY = 0x00CC0020
-PW_RENDERFULLCONTENT = 2
-SW_RESTORE = 9
+    SRCCOPY = 0x00CC0020
+    PW_RENDERFULLCONTENT = 2
+    SW_RESTORE = 9
 
-# Strict 64-bit Win32 GDI and User32 Signatures
-user32.GetDC.argtypes = [wintypes.HWND]
-user32.GetDC.restype = wintypes.HDC
-user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
-user32.ReleaseDC.restype = wintypes.BOOL
+    # Strict 64-bit Win32 GDI and User32 Signatures
+    user32.GetDC.argtypes = [wintypes.HWND]
+    user32.GetDC.restype = wintypes.HDC
+    user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
+    user32.ReleaseDC.restype = wintypes.BOOL
 
-user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.GetWindowRect.restype = wintypes.BOOL
-user32.PrintWindow.argtypes = [wintypes.HWND, wintypes.HDC, ctypes.c_uint]
-user32.PrintWindow.restype = wintypes.BOOL
-user32.GetForegroundWindow.argtypes = []
-user32.GetForegroundWindow.restype = wintypes.HWND
-user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
-user32.ShowWindow.restype = wintypes.BOOL
-user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-user32.SetForegroundWindow.restype = wintypes.BOOL
-user32.IsWindow.argtypes = [wintypes.HWND]
-user32.IsWindow.restype = wintypes.BOOL
-user32.IsWindowVisible.argtypes = [wintypes.HWND]
-user32.IsWindowVisible.restype = wintypes.BOOL
-user32.IsIconic.argtypes = [wintypes.HWND]
-user32.IsIconic.restype = wintypes.BOOL
-user32.BringWindowToTop.argtypes = [wintypes.HWND]
-user32.BringWindowToTop.restype = wintypes.BOOL
-user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
-user32.AttachThreadInput.restype = wintypes.BOOL
-user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-user32.GetWindowTextLengthW.restype = ctypes.c_int
-user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetWindowTextW.restype = ctypes.c_int
-user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.PostMessageW.restype = wintypes.BOOL
-user32.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-user32.OpenInputDesktop.restype = wintypes.HANDLE
-user32.CloseDesktop.argtypes = [wintypes.HANDLE]
-user32.CloseDesktop.restype = wintypes.BOOL
-user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.GetClientRect.restype = wintypes.BOOL
-user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
-user32.ClientToScreen.restype = wintypes.BOOL
+    user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    user32.GetWindowRect.restype = wintypes.BOOL
+    user32.PrintWindow.argtypes = [wintypes.HWND, wintypes.HDC, ctypes.c_uint]
+    user32.PrintWindow.restype = wintypes.BOOL
+    user32.GetForegroundWindow.argtypes = []
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.ShowWindow.restype = wintypes.BOOL
+    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+    user32.SetForegroundWindow.restype = wintypes.BOOL
+    user32.IsWindow.argtypes = [wintypes.HWND]
+    user32.IsWindow.restype = wintypes.BOOL
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.IsWindowVisible.restype = wintypes.BOOL
+    user32.IsIconic.argtypes = [wintypes.HWND]
+    user32.IsIconic.restype = wintypes.BOOL
+    user32.BringWindowToTop.argtypes = [wintypes.HWND]
+    user32.BringWindowToTop.restype = wintypes.BOOL
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
+    user32.AttachThreadInput.restype = wintypes.BOOL
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+    user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    user32.PostMessageW.restype = wintypes.BOOL
+    user32.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    user32.OpenInputDesktop.restype = wintypes.HANDLE
+    user32.CloseDesktop.argtypes = [wintypes.HANDLE]
+    user32.CloseDesktop.restype = wintypes.BOOL
+    user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    user32.GetClientRect.restype = wintypes.BOOL
+    user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+    user32.ClientToScreen.restype = wintypes.BOOL
 
-dwmapi = getattr(ctypes.windll, "dwmapi", None)
-DWMWA_EXTENDED_FRAME_BOUNDS = 9
-DWMWA_CLOAKED = 14
+    dwmapi = getattr(ctypes.windll, "dwmapi", None)
+    DWMWA_EXTENDED_FRAME_BOUNDS = 9
+    DWMWA_CLOAKED = 14
 
-gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
-gdi32.CreateCompatibleDC.restype = wintypes.HDC
-gdi32.CreateCompatibleBitmap.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
-gdi32.CreateCompatibleBitmap.restype = wintypes.HBITMAP
-gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
-gdi32.SelectObject.restype = wintypes.HGDIOBJ
-gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
-gdi32.DeleteObject.restype = wintypes.BOOL
-gdi32.DeleteDC.argtypes = [wintypes.HDC]
-gdi32.DeleteDC.restype = wintypes.BOOL
-gdi32.BitBlt.argtypes = [
-    wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-    wintypes.HDC, ctypes.c_int, ctypes.c_int, wintypes.DWORD
-]
-gdi32.BitBlt.restype = wintypes.BOOL
-gdi32.GetDIBits.argtypes = [
-    wintypes.HDC, wintypes.HBITMAP, ctypes.c_uint, ctypes.c_uint,
-    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint
-]
-gdi32.GetDIBits.restype = ctypes.c_int
+    gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
+    gdi32.CreateCompatibleDC.restype = wintypes.HDC
+    gdi32.CreateCompatibleBitmap.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
+    gdi32.CreateCompatibleBitmap.restype = wintypes.HBITMAP
+    gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
+    gdi32.SelectObject.restype = wintypes.HGDIOBJ
+    gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
+    gdi32.DeleteObject.restype = wintypes.BOOL
+    gdi32.DeleteDC.argtypes = [wintypes.HDC]
+    gdi32.DeleteDC.restype = wintypes.BOOL
+    gdi32.BitBlt.argtypes = [
+        wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        wintypes.HDC, ctypes.c_int, ctypes.c_int, wintypes.DWORD
+    ]
+    gdi32.BitBlt.restype = wintypes.BOOL
+    gdi32.GetDIBits.argtypes = [
+        wintypes.HDC, wintypes.HBITMAP, ctypes.c_uint, ctypes.c_uint,
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint
+    ]
+    gdi32.GetDIBits.restype = ctypes.c_int
+else:
+    user32 = None
+    gdi32 = None
+    kernel32 = None
+    dwmapi = None
+    SRCCOPY = 0x00CC0020
+    PW_RENDERFULLCONTENT = 2
+    SW_RESTORE = 9
+    DWMWA_EXTENDED_FRAME_BOUNDS = 9
+    DWMWA_CLOAKED = 14
 
 
 class BITMAPINFOHEADER(ctypes.Structure):
@@ -166,11 +178,28 @@ def capture_screen(bbox: Optional[Tuple[int, int, int, int]] = None) -> Image.Im
     Captures the virtual screen or specified bounding box (left, top, width, height).
     Runs inside interactive desktop worker thread to ensure display surface access.
     """
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            img, _ = get_platform_driver().capture.capture_screen()
+            if bbox:
+                x, y, w, h = bbox
+                img = img.crop((x, y, x + w, y + h))
+            return img
+        except Exception:
+            return Image.new("RGB", (1920, 1080), color=(30, 30, 46))
     return run_in_interactive_desktop(_capture_screen_worker, bbox)
 
 
 def list_monitors() -> List[Dict[str, Any]]:
     """Returns a list of all active display monitors with their bounds, work areas, and primary status."""
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            return get_platform_driver().window_manager.list_monitors()
+        except Exception:
+            return []
+
     monitors = []
 
     class MONITORINFOEX(ctypes.Structure):
@@ -204,6 +233,13 @@ def list_monitors() -> List[Dict[str, Any]]:
 
 def list_visible_windows() -> List[Dict[str, Any]]:
     """Returns a list of all genuine, active top-level windows with their titles and bounds."""
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            return get_platform_driver().window_manager.list_windows()
+        except Exception:
+            return []
+
     ensure_interactive_desktop()
     try:
         from control.vdm import default_vdm
@@ -301,6 +337,13 @@ def list_visible_windows() -> List[Dict[str, Any]]:
 
 def find_window(target: str) -> Optional[Dict[str, Any]]:
     """Finds first matching visible window by title substring (case-insensitive)."""
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            return get_platform_driver().window_manager.find_window(target)
+        except Exception:
+            return None
+
     target_lower = target.lower()
     for win in list_visible_windows():
         if target_lower in win["title"].lower():
@@ -308,8 +351,15 @@ def find_window(target: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def focus_window(hwnd: int) -> bool:
+def focus_window(hwnd: Any) -> bool:
     """Brings the window to foreground, restores if minimized, and verifies activation."""
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            return get_platform_driver().window_manager.focus_window(hwnd)
+        except Exception:
+            return False
+
     ensure_interactive_desktop()
     if not hwnd or not user32.IsWindow(hwnd):
         return False
@@ -379,9 +429,16 @@ def focus_window(hwnd: int) -> bool:
 
 def close_window_safely(target: str, force: bool = False) -> bool:
     """
-    Safely closes a window matching target title using direct Win32 messages.
+    Safely closes a window matching target title using direct Win32 messages or Hyprland IPC.
     Never sends global keyboard shortcuts (Alt+F4); completely immune to misdirected closes.
     """
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            return get_platform_driver().window_manager.close_window(target, force=force)
+        except Exception:
+            return False
+
     win = find_window(target)
     if not win:
         return True
@@ -423,6 +480,13 @@ def close_window_safely(target: str, force: bool = False) -> bool:
 
 def get_foreground_window_info() -> Optional[Dict[str, Any]]:
     """Returns information about the currently active foreground window."""
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            return get_platform_driver().window_manager.get_active_window()
+        except Exception:
+            return None
+
     ensure_interactive_desktop()
     hwnd = user32.GetForegroundWindow()
     if not hwnd:
@@ -452,12 +516,20 @@ def get_foreground_window_info() -> Optional[Dict[str, Any]]:
     }
 
 
-def get_window_extended_bounds(hwnd: int) -> Tuple[int, int, int, int]:
+def get_window_extended_bounds(hwnd: Any) -> Tuple[int, int, int, int]:
     """
     Returns (left, top, width, height) of genuine visible window surface,
     excluding invisible Windows 10/11 aero drop-shadow resizing margins.
     Falls back to GetWindowRect if DWM is unavailable.
     """
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            b = get_platform_driver().window_manager.get_window_bounds(hwnd)
+            return b if b else (0, 0, 800, 600)
+        except Exception:
+            return (0, 0, 800, 600)
+
     if not hwnd or not user32.IsWindow(hwnd):
         return (0, 0, 0, 0)
 
@@ -480,11 +552,14 @@ def get_window_extended_bounds(hwnd: int) -> Tuple[int, int, int, int]:
     return (int(rect.left), int(rect.top), int(w), int(h))
 
 
-def get_window_client_bounds(hwnd: int) -> Tuple[int, int, int, int]:
+def get_window_client_bounds(hwnd: Any) -> Tuple[int, int, int, int]:
     """
     Returns (left, top, width, height) in absolute screen coordinates
     for the client/content area of the window (excluding OS title bar and frames).
     """
+    if not IS_WINDOWS:
+        return get_window_extended_bounds(hwnd)
+
     if not hwnd or not user32.IsWindow(hwnd):
         return (0, 0, 0, 0)
 
@@ -498,7 +573,7 @@ def get_window_client_bounds(hwnd: int) -> Tuple[int, int, int, int]:
     return (int(pt.x), int(pt.y), int(w), int(h))
 
 
-def window_to_screen_coords(hwnd: int, rx: int, ry: int, client_only: bool = False) -> Tuple[int, int]:
+def window_to_screen_coords(hwnd: Any, rx: int, ry: int, client_only: bool = False) -> Tuple[int, int]:
     """
     Translates relative window/client coordinates (rx, ry) into absolute desktop screen coordinates.
     """
@@ -587,13 +662,20 @@ def _capture_window_worker(hwnd: int, client_only: bool = False) -> Image.Image:
             user32.ReleaseDC(0, hdc_screen)
 
 
-def capture_window(hwnd: int, client_only: bool = False) -> Image.Image:
+def capture_window(hwnd: Any, client_only: bool = False) -> Image.Image:
     """
-    Captures a specific window using PrintWindow (PW_RENDERFULLCONTENT)
-    with automatic fallback to BitBlt if PrintWindow returns 0 or black.
-    Strips invisible aero drop-shadows or crops client-only area cleanly.
-    Runs inside interactive desktop worker thread to ensure display surface access.
+    Captures a specific window using PrintWindow (PW_RENDERFULLCONTENT) on Windows
+    or grim on Wayland.
     """
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            img, _ = get_platform_driver().capture.capture_window(str(hwnd))
+            if img:
+                return img
+        except Exception:
+            pass
+        return Image.new("RGB", (800, 600), color=(40, 40, 50))
     return run_in_interactive_desktop(_capture_window_worker, hwnd, client_only)
 
 

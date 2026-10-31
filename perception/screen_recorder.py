@@ -21,29 +21,16 @@ if PACKAGE_ROOT not in sys.path:
 
 from perception.screen_capture import default_capture_manager, get_foreground_window_info
 
-user32 = ctypes.windll.user32
-gdi32 = ctypes.windll.gdi32
+from control.safety import get_physical_cursor_pos, IS_WINDOWS
 
-# Win32 Cursor Information Structure
-class POINT(ctypes.Structure):
-    _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+if IS_WINDOWS:
+    user32 = ctypes.windll.user32
+    gdi32 = ctypes.windll.gdi32
+else:
+    user32 = None
+    gdi32 = None
 
-class CURSORINFO(ctypes.Structure):
-    _fields_ = [
-        ("cbSize", wintypes.DWORD),
-        ("flags", wintypes.DWORD),
-        ("hCursor", wintypes.HICON),
-        ("ptScreenPos", POINT),
-    ]
-
-CURSOR_SHOWING = 0x00000001
-
-
-def get_current_cursor_pos() -> Tuple[int, int]:
-    """Returns current physical cursor (x, y) coordinates."""
-    pt = POINT()
-    user32.GetCursorPos(ctypes.byref(pt))
-    return int(pt.x), int(pt.y)
+get_current_cursor_pos = get_physical_cursor_pos
 
 
 class ScreenRecorder:

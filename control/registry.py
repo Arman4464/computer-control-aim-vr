@@ -1,53 +1,65 @@
 """
 High-Speed Native Windows Registry Manager (AIM-VR 3.0 Control Subsystem).
 Provides direct, zero-dependency access to the Windows Registry (HKCU, HKLM, HKCR, HKU, HKCC)
-using Python's native winreg module with full 64-bit / 32-bit view awareness.
+using Python's native winreg module on Windows, and structured diagnostic responses on Linux.
 """
 
-import winreg
 import os
 import sys
 from typing import Dict, Any, List, Optional, Tuple, Union
 
-# Root key mapping
-HKEY_MAP = {
-    "HKCU": winreg.HKEY_CURRENT_USER,
-    "HKEY_CURRENT_USER": winreg.HKEY_CURRENT_USER,
-    "HKLM": winreg.HKEY_LOCAL_MACHINE,
-    "HKEY_LOCAL_MACHINE": winreg.HKEY_LOCAL_MACHINE,
-    "HKCR": winreg.HKEY_CLASSES_ROOT,
-    "HKEY_CLASSES_ROOT": winreg.HKEY_CLASSES_ROOT,
-    "HKU": winreg.HKEY_USERS,
-    "HKEY_USERS": winreg.HKEY_USERS,
-    "HKCC": winreg.HKEY_CURRENT_CONFIG,
-    "HKEY_CURRENT_CONFIG": winreg.HKEY_CURRENT_CONFIG,
-}
+IS_WINDOWS = (sys.platform == "win32")
 
-# Type string to winreg constant mapping
-TYPE_MAP = {
-    "sz": winreg.REG_SZ,
-    "string": winreg.REG_SZ,
-    "expand_sz": winreg.REG_EXPAND_SZ,
-    "multi_sz": winreg.REG_MULTI_SZ,
-    "dword": winreg.REG_DWORD,
-    "qword": winreg.REG_QWORD,
-    "binary": winreg.REG_BINARY,
-    "none": winreg.REG_NONE,
-}
+if IS_WINDOWS:
+    import winreg
 
-REV_TYPE_MAP = {
-    winreg.REG_SZ: "REG_SZ",
-    winreg.REG_EXPAND_SZ: "REG_EXPAND_SZ",
-    winreg.REG_MULTI_SZ: "REG_MULTI_SZ",
-    winreg.REG_DWORD: "REG_DWORD",
-    winreg.REG_QWORD: "REG_QWORD",
-    winreg.REG_BINARY: "REG_BINARY",
-    winreg.REG_NONE: "REG_NONE",
-}
+    # Root key mapping
+    HKEY_MAP = {
+        "HKCU": winreg.HKEY_CURRENT_USER,
+        "HKEY_CURRENT_USER": winreg.HKEY_CURRENT_USER,
+        "HKLM": winreg.HKEY_LOCAL_MACHINE,
+        "HKEY_LOCAL_MACHINE": winreg.HKEY_LOCAL_MACHINE,
+        "HKCR": winreg.HKEY_CLASSES_ROOT,
+        "HKEY_CLASSES_ROOT": winreg.HKEY_CLASSES_ROOT,
+        "HKU": winreg.HKEY_USERS,
+        "HKEY_USERS": winreg.HKEY_USERS,
+        "HKCC": winreg.HKEY_CURRENT_CONFIG,
+        "HKEY_CURRENT_CONFIG": winreg.HKEY_CURRENT_CONFIG,
+    }
+
+    # Type string to winreg constant mapping
+    TYPE_MAP = {
+        "sz": winreg.REG_SZ,
+        "string": winreg.REG_SZ,
+        "expand_sz": winreg.REG_EXPAND_SZ,
+        "multi_sz": winreg.REG_MULTI_SZ,
+        "dword": winreg.REG_DWORD,
+        "qword": winreg.REG_QWORD,
+        "binary": winreg.REG_BINARY,
+        "none": winreg.REG_NONE,
+    }
+
+    REV_TYPE_MAP = {
+        winreg.REG_SZ: "REG_SZ",
+        winreg.REG_EXPAND_SZ: "REG_EXPAND_SZ",
+        winreg.REG_MULTI_SZ: "REG_MULTI_SZ",
+        winreg.REG_DWORD: "REG_DWORD",
+        winreg.REG_QWORD: "REG_QWORD",
+        winreg.REG_BINARY: "REG_BINARY",
+        winreg.REG_NONE: "REG_NONE",
+    }
+else:
+    winreg = None
+    HKEY_MAP = {}
+    TYPE_MAP = {}
+    REV_TYPE_MAP = {}
 
 
 def _parse_reg_path(full_path: str) -> Tuple[int, str]:
     """Splits 'HKCU\\Software\\Microsoft' into (winreg.HKEY_CURRENT_USER, 'Software\\Microsoft')."""
+    if not IS_WINDOWS:
+        return 0, ""
+
     if not full_path or not isinstance(full_path, str):
         raise ValueError("Registry path must be a non-empty string.")
 
@@ -67,6 +79,12 @@ class RegistryManager:
 
     def get_value(self, path: str, name: str = "", view64: bool = True) -> Dict[str, Any]:
         """Reads a value from the specified registry path."""
+        if not IS_WINDOWS:
+            return {
+                "status": "unsupported_platform",
+                "message": "Windows Registry is Windows-specific. On Arch Linux Hyprland, system and app configurations are managed via dotfiles (~/.config), dconf, or /etc.",
+            }
+
         try:
             root_hkey, sub_key = _parse_reg_path(path)
             access = winreg.KEY_READ | (winreg.KEY_WOW64_64KEY if view64 else winreg.KEY_WOW64_32KEY)
@@ -97,6 +115,12 @@ class RegistryManager:
         view64: bool = True
     ) -> Dict[str, Any]:
         """Creates or updates a registry value, creating the parent key path if it does not exist."""
+        if not IS_WINDOWS:
+            return {
+                "status": "unsupported_platform",
+                "message": "Windows Registry is Windows-specific. On Arch Linux Hyprland, system and app configurations are managed via dotfiles (~/.config), dconf, or /etc.",
+            }
+
         try:
             root_hkey, sub_key = _parse_reg_path(path)
             access = winreg.KEY_WRITE | (winreg.KEY_WOW64_64KEY if view64 else winreg.KEY_WOW64_32KEY)
@@ -118,18 +142,47 @@ class RegistryManager:
                     "status": "success",
                     "path": path,
                     "name": name,
-                    "value": converted_value,
-                    "type": REV_TYPE_MAP.get(reg_type, "REG_SZ"),
+                    "value": value,
+                    "type": val_type,
                 }
-        except (ValueError, TypeError, OverflowError) as e:
-            return {"status": "error", "message": f"Invalid registry value conversion: {e}"}
-        except PermissionError:
-            return {"status": "error", "message": f"Access denied writing registry: {path}"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def delete_value(self, path: str, name: str, view64: bool = True) -> Dict[str, Any]:
+        """Deletes a named value from a registry key."""
+        if not IS_WINDOWS:
+            return {"status": "unsupported_platform", "message": "Windows Registry is Windows-specific."}
+
+        try:
+            root_hkey, sub_key = _parse_reg_path(path)
+            access = winreg.KEY_SET_VALUE | (winreg.KEY_WOW64_64KEY if view64 else winreg.KEY_WOW64_32KEY)
+            with winreg.OpenKey(root_hkey, sub_key, 0, access) as key:
+                winreg.DeleteValue(key, name)
+                return {"status": "success", "message": f"Deleted value '{name}' from '{path}'"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def delete_key(self, path: str, view64: bool = True) -> Dict[str, Any]:
+        """Deletes a registry key (must be empty of subkeys)."""
+        if not IS_WINDOWS:
+            return {"status": "unsupported_platform", "message": "Windows Registry is Windows-specific."}
+
+        try:
+            root_hkey, sub_key = _parse_reg_path(path)
+            access = winreg.KEY_WRITE | (winreg.KEY_WOW64_64KEY if view64 else winreg.KEY_WOW64_32KEY)
+            if hasattr(winreg, "DeleteKeyEx"):
+                winreg.DeleteKeyEx(root_hkey, sub_key, access, 0)
+            else:
+                winreg.DeleteKey(root_hkey, sub_key)
+            return {"status": "success", "message": f"Deleted key '{path}'"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
     def list_key(self, path: str, view64: bool = True) -> Dict[str, Any]:
-        """Lists all subkeys and values under a registry path."""
+        """Lists all values and subkeys under a registry key."""
+        if not IS_WINDOWS:
+            return {"status": "unsupported_platform", "message": "Windows Registry is Windows-specific."}
+
         try:
             root_hkey, sub_key = _parse_reg_path(path)
             access = winreg.KEY_READ | (winreg.KEY_WOW64_64KEY if view64 else winreg.KEY_WOW64_32KEY)
@@ -137,84 +190,32 @@ class RegistryManager:
             with winreg.OpenKey(root_hkey, sub_key, 0, access) as key:
                 num_subkeys, num_values, _ = winreg.QueryInfoKey(key)
 
-                subkeys: List[str] = []
-                for i in range(num_subkeys):
-                    try:
-                        subkeys.append(winreg.EnumKey(key, i))
-                    except OSError:
-                        break
-
-                values: List[Dict[str, Any]] = []
+                values = []
                 for i in range(num_values):
-                    try:
-                        v_name, v_val, v_type = winreg.EnumValue(key, i)
-                        values.append({
-                            "name": v_name or "(Default)",
-                            "value": v_val,
-                            "type": REV_TYPE_MAP.get(v_type, f"TYPE_{v_type}"),
-                        })
-                    except OSError:
-                        break
+                    v_name, v_val, v_type = winreg.EnumValue(key, i)
+                    values.append({
+                        "name": v_name or "(Default)",
+                        "value": v_val if not isinstance(v_val, bytes) else v_val.hex(),
+                        "type": REV_TYPE_MAP.get(v_type, f"TYPE_{v_type}")
+                    })
+
+                subkeys = []
+                for i in range(num_subkeys):
+                    subkeys.append(winreg.EnumKey(key, i))
 
                 return {
                     "status": "success",
                     "path": path,
-                    "subkeys_count": len(subkeys),
-                    "subkeys": subkeys,
                     "values_count": len(values),
+                    "subkeys_count": len(subkeys),
                     "values": values,
+                    "subkeys": subkeys,
                 }
-        except FileNotFoundError:
-            return {"status": "error", "message": f"Registry path not found: {path}"}
-        except PermissionError:
-            return {"status": "error", "message": f"Access denied enumerating registry: {path}"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    def delete_value(self, path: str, name: str, view64: bool = True) -> Dict[str, Any]:
-        """Deletes a named value from a registry key."""
-        try:
-            root_hkey, sub_key = _parse_reg_path(path)
-            access = winreg.KEY_WRITE | (winreg.KEY_WOW64_64KEY if view64 else winreg.KEY_WOW64_32KEY)
-
-            with winreg.OpenKey(root_hkey, sub_key, 0, access) as key:
-                winreg.DeleteValue(key, name)
-                return {"status": "success", "message": f"Deleted value '{name}' from {path}"}
-        except FileNotFoundError:
-            return {"status": "error", "message": f"Value '{name}' or key not found in {path}"}
-        except PermissionError:
-            return {"status": "error", "message": f"Access denied deleting value from {path}"}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
-
-    def delete_key(self, path: str, view64: bool = True) -> Dict[str, Any]:
-        """Deletes a registry key (must have no subkeys)."""
-        try:
-            root_hkey, sub_key = _parse_reg_path(path)
-            if not sub_key:
-                return {"status": "error", "message": f"Cannot delete root registry hive '{path}'"}
-
-            access = winreg.KEY_WRITE | (winreg.KEY_WOW64_64KEY if view64 else winreg.KEY_WOW64_32KEY)
-
-            parts = sub_key.rsplit("\\", 1)
-            parent_path = parts[0] if len(parts) > 1 else ""
-            key_name = parts[1] if len(parts) > 1 else sub_key
-
-            with winreg.OpenKey(root_hkey, parent_path, 0, access) as parent_key:
-                if hasattr(winreg, "DeleteKeyEx"):
-                    try:
-                        winreg.DeleteKeyEx(parent_key, key_name, access=access)
-                    except TypeError:
-                        winreg.DeleteKey(parent_key, key_name)
-                else:
-                    winreg.DeleteKey(parent_key, key_name)
-                return {"status": "success", "message": f"Deleted registry key {path}"}
-        except FileNotFoundError:
-            return {"status": "error", "message": f"Registry key not found: {path}"}
-        except PermissionError:
-            return {"status": "error", "message": f"Access denied deleting key: {path}"}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+    list_values = list_key
 
 
 default_registry = RegistryManager()
+

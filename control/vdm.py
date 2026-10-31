@@ -1,61 +1,71 @@
 """
-Windows 10/11 Task View Virtual Desktop Manager (AIM-VR 3.0 Control Subsystem).
-Interfaces with the Windows COM IVirtualDesktopManager interface to determine whether
-application windows are situated on the user's active virtual desktop.
+Virtual Desktop Manager (AIM-VR 3.0 Control Subsystem).
+Interfaces with Windows COM IVirtualDesktopManager on Windows,
+and Hyprland workspace IPC on Linux to determine whether windows reside on the active desktop.
 """
 
+import sys
 import ctypes
-from ctypes import wintypes
 import logging
 import threading
 from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
-ole32 = ctypes.windll.ole32
+IS_WINDOWS = (sys.platform == "win32")
 
-# Configure CoInitialize and CoCreateInstance signatures
-ole32.CoInitialize.argtypes = [ctypes.c_void_p]
-ole32.CoInitialize.restype = ctypes.c_long
+if IS_WINDOWS:
+    from ctypes import wintypes
+    ole32 = ctypes.windll.ole32
+    user32 = ctypes.windll.user32
 
-ole32.CoCreateInstance.argtypes = [
-    ctypes.c_void_p,                 # rclsid
-    ctypes.c_void_p,                 # pUnkOuter
-    ctypes.c_ulong,                  # dwClsContext
-    ctypes.c_void_p,                 # riid
-    ctypes.POINTER(ctypes.c_void_p)  # ppv
-]
-ole32.CoCreateInstance.restype = ctypes.c_long
+    # Configure CoInitialize and CoCreateInstance signatures
+    ole32.CoInitialize.argtypes = [ctypes.c_void_p]
+    ole32.CoInitialize.restype = ctypes.c_long
 
-# Standard COM CLSIDs and IIDs for IVirtualDesktopManager
-CLSID_VirtualDesktopManager = "{aa509086-5ca9-4c25-8f95-589d3c07b48a}"
-IID_IVirtualDesktopManager = "{a5cd92ff-29be-454c-8d04-d82879fb3f1b}"
-
-class GUID(ctypes.Structure):
-    _fields_ = [
-        ("Data1", ctypes.c_ulong),
-        ("Data2", ctypes.c_ushort),
-        ("Data3", ctypes.c_ushort),
-        ("Data4", ctypes.c_ubyte * 8)
+    ole32.CoCreateInstance.argtypes = [
+        ctypes.c_void_p,                 # rclsid
+        ctypes.c_void_p,                 # pUnkOuter
+        ctypes.c_ulong,                  # dwClsContext
+        ctypes.c_void_p,                 # riid
+        ctypes.POINTER(ctypes.c_void_p)  # ppv
     ]
+    ole32.CoCreateInstance.restype = ctypes.c_long
 
-def _guid_from_str(guid_str: str) -> GUID:
-    clean = guid_str.strip("{}").replace("-", "")
-    data1 = int(clean[0:8], 16)
-    data2 = int(clean[8:12], 16)
-    data3 = int(clean[12:16], 16)
-    data4 = (ctypes.c_ubyte * 8)(*(int(clean[i:i+2], 16) for i in range(16, 32, 2)))
-    return GUID(data1, data2, data3, data4)
+    # Standard COM CLSIDs and IIDs for IVirtualDesktopManager
+    CLSID_VirtualDesktopManager = "{aa509086-5ca9-4c25-8f95-589d3c07b48a}"
+    IID_IVirtualDesktopManager = "{a5cd92ff-29be-454c-8d04-d82879fb3f1b}"
 
-CLSCTX_INPROC_SERVER = 0x1
+    class GUID(ctypes.Structure):
+        _fields_ = [
+            ("Data1", ctypes.c_ulong),
+            ("Data2", ctypes.c_ushort),
+            ("Data3", ctypes.c_ushort),
+            ("Data4", ctypes.c_ubyte * 8)
+        ]
+
+    def _guid_from_str(guid_str: str) -> GUID:
+        clean = guid_str.strip("{}").replace("-", "")
+        data1 = int(clean[0:8], 16)
+        data2 = int(clean[8:12], 16)
+        data3 = int(clean[12:16], 16)
+        data4 = (ctypes.c_ubyte * 8)(*(int(clean[i:i+2], 16) for i in range(16, 32, 2)))
+        return GUID(data1, data2, data3, data4)
+
+    CLSCTX_INPROC_SERVER = 0x1
+else:
+    ole32 = None
 
 _local_storage = threading.local()
 
 
 class VirtualDesktopManager:
-    """Provides querying and filtering of Windows 10/11 virtual desktops with STA thread-safety."""
+    """Provides querying and filtering of virtual desktops with STA thread-safety."""
 
     def _ensure_vdm(self) -> Optional[ctypes.c_void_p]:
+        if not IS_WINDOWS:
+            return None
+
         ptr = getattr(_local_storage, "vdm_ptr", None)
         if ptr is not None and ptr.value:
             return ptr
@@ -85,6 +95,9 @@ class VirtualDesktopManager:
 
     def release(self):
         """Releases the thread-local COM instance if present."""
+        if not IS_WINDOWS:
+            return
+
         ptr = getattr(_local_storage, "vdm_ptr", None)
         if ptr and ptr.value:
             try:
@@ -96,12 +109,24 @@ class VirtualDesktopManager:
                 pass
             _local_storage.vdm_ptr = None
 
-    def is_window_on_current_desktop(self, hwnd: int) -> bool:
+    def is_window_on_current_desktop(self, hwnd: Any) -> bool:
         """
-        Returns True if the given top-level window HWND resides on the active virtual desktop.
-        Returns True as fallback if VirtualDesktopManager COM service is unavailable.
+        Returns True if the given top-level window resides on the active virtual desktop/workspace.
         """
-        if not hwnd or not ctypes.windll.user32.IsWindow(hwnd):
+        if not IS_WINDOWS:
+            try:
+                from control.platform.hyprland.hyprland_ipc import default_hyprland_ipc
+                active_ws = default_hyprland_ipc.get_active_workspace()
+                active_id = active_ws.get("id")
+                clients = default_hyprland_ipc.get_clients()
+                for c in clients:
+                    if str(c.get("address")) == str(hwnd):
+                        return c.get("workspace", {}).get("id") == active_id
+                return True
+            except Exception:
+                return True
+
+        if not hwnd or not user32 or not user32.IsWindow(hwnd):
             return False
 
         try:

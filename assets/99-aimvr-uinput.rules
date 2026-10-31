@@ -1,0 +1,3 @@
+# /usr/lib/udev/rules.d/99-aimvr-uinput.rules or /etc/udev/rules.d/99-aimvr-uinput.rules
+# Non-root access to /dev/uinput for AIM-VR Computer Control input simulation (evdev)
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput", GROUP="input", MODE="0660"

@@ -4,44 +4,64 @@ Provides:
   - Corner failsafe ((0, 0) abort)
   - User physical mouse contention detection and graceful yield
   - Speed profile governor (fast, normal, step-by-step)
-  - Interactive desktop thread attachment (WinSta0\\Default)
-  - Process elevation / UIPI checking
+  - Interactive desktop thread attachment (WinSta0\\Default on Windows)
+  - Process elevation / UIPI checking (Admin on Windows, Root on Linux)
 """
 
 import ctypes
-from ctypes import wintypes
 import time
 import sys
 import math
+import os
 
-user32 = ctypes.windll.user32
-kernel32 = ctypes.windll.kernel32
-shell32 = ctypes.windll.shell32
-ole32 = ctypes.windll.ole32
-
-# 64-bit safe Win32 User32 / Kernel32 / Shell32 signatures
-user32.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-user32.OpenInputDesktop.restype = wintypes.HANDLE
-user32.GetThreadDesktop.argtypes = [wintypes.DWORD]
-user32.GetThreadDesktop.restype = wintypes.HANDLE
-user32.SetThreadDesktop.argtypes = [wintypes.HANDLE]
-user32.SetThreadDesktop.restype = wintypes.BOOL
-user32.CloseDesktop.argtypes = [wintypes.HANDLE]
-user32.CloseDesktop.restype = wintypes.BOOL
-user32.GetSystemMetrics.argtypes = [ctypes.c_int]
-user32.GetSystemMetrics.restype = ctypes.c_int
-
-kernel32.GetCurrentThreadId.argtypes = []
-kernel32.GetCurrentThreadId.restype = wintypes.DWORD
-
-shell32.IsUserAnAdmin.argtypes = []
-shell32.IsUserAnAdmin.restype = wintypes.BOOL
+IS_WINDOWS = (sys.platform == "win32")
 
 class POINT(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
 
-user32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
-user32.GetCursorPos.restype = wintypes.BOOL
+if IS_WINDOWS:
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    shell32 = ctypes.windll.shell32
+    ole32 = ctypes.windll.ole32
+
+    # 64-bit safe Win32 User32 / Kernel32 / Shell32 signatures
+    user32.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    user32.OpenInputDesktop.restype = wintypes.HANDLE
+    user32.GetThreadDesktop.argtypes = [wintypes.DWORD]
+    user32.GetThreadDesktop.restype = wintypes.HANDLE
+    user32.SetThreadDesktop.argtypes = [wintypes.HANDLE]
+    user32.SetThreadDesktop.restype = wintypes.BOOL
+    user32.CloseDesktop.argtypes = [wintypes.HANDLE]
+    user32.CloseDesktop.restype = wintypes.BOOL
+    user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+    user32.GetSystemMetrics.restype = ctypes.c_int
+
+    kernel32.GetCurrentThreadId.argtypes = []
+    kernel32.GetCurrentThreadId.restype = wintypes.DWORD
+
+    shell32.IsUserAnAdmin.argtypes = []
+    shell32.IsUserAnAdmin.restype = wintypes.BOOL
+
+    user32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
+    user32.GetCursorPos.restype = wintypes.BOOL
+
+    # COM Apartment Threading Flags
+    COINIT_MULTITHREADED = 0x0
+    COINIT_APARTMENTTHREADED = 0x2
+
+    ole32.CoInitializeEx.argtypes = [ctypes.c_void_p, wintypes.DWORD]
+    ole32.CoInitializeEx.restype = getattr(wintypes, "HRESULT", ctypes.HRESULT)
+    ole32.CoUninitialize.argtypes = []
+    ole32.CoUninitialize.restype = None
+else:
+    user32 = None
+    kernel32 = None
+    shell32 = None
+    ole32 = None
+    COINIT_MULTITHREADED = 0x0
+    COINIT_APARTMENTTHREADED = 0x2
 
 
 class FailsafeException(Exception):
@@ -56,14 +76,6 @@ class UserContentionException(Exception):
 
 _desktop_handle = None
 
-# COM Apartment Threading Flags
-COINIT_MULTITHREADED = 0x0
-COINIT_APARTMENTTHREADED = 0x2
-
-ole32.CoInitializeEx.argtypes = [ctypes.c_void_p, wintypes.DWORD]
-ole32.CoInitializeEx.restype = getattr(wintypes, "HRESULT", ctypes.HRESULT)
-ole32.CoUninitialize.argtypes = []
-ole32.CoUninitialize.restype = None
 
 def run_in_interactive_desktop(func, *args, timeout: float = 10.0, **kwargs):
     """
@@ -72,7 +84,11 @@ def run_in_interactive_desktop(func, *args, timeout: float = 10.0, **kwargs):
     on threads that have already created windows or hooks (ERROR_BUSY), so a fresh thread
     is required for 100% reliable UI Automation enumeration from background processes.
     Uses MTA (COINIT_MULTITHREADED) to avoid message pump deadlocks during COM/UIA calls.
+    On non-Windows platforms, executes directly in the current thread.
     """
+    if not IS_WINDOWS:
+        return func(*args, **kwargs)
+
     import threading
     result = [None]
     exc = [None]
@@ -113,7 +129,11 @@ def ensure_interactive_desktop() -> bool:
     Attaches current thread to the interactive user input desktop ('Default' in WinSta0)
     to ensure 100% reliable physical cursor reading and event dispatch across worker
     threads and background subshell sessions.
+    On non-Windows platforms, ensures Wayland/display session is valid.
     """
+    if not IS_WINDOWS:
+        return bool(os.environ.get("WAYLAND_DISPLAY") or os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") or os.environ.get("DISPLAY"))
+
     global _desktop_handle
     try:
         tid = kernel32.GetCurrentThreadId()
@@ -142,12 +162,20 @@ def ensure_interactive_desktop() -> bool:
     return False
 
 
-# Attach current thread to interactive desktop only if needed
-ensure_interactive_desktop()
+# Attach current thread to interactive desktop only if needed on Windows
+if IS_WINDOWS:
+    ensure_interactive_desktop()
 
 
 def get_physical_cursor_pos() -> tuple[int, int]:
     """Returns the current physical cursor screen position (x, y)."""
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            return get_platform_driver().safety.get_cursor_pos()
+        except Exception:
+            return 0, 0
+
     ensure_interactive_desktop()
     pt = POINT()
     user32.GetCursorPos(ctypes.byref(pt))
@@ -155,7 +183,13 @@ def get_physical_cursor_pos() -> tuple[int, int]:
 
 
 def is_process_elevated() -> bool:
-    """Returns True if the current process is running with Administrator privileges."""
+    """Returns True if the current process is running with Administrator / root privileges."""
+    if not IS_WINDOWS:
+        try:
+            return os.geteuid() == 0
+        except AttributeError:
+            return False
+
     try:
         return bool(shell32.IsUserAnAdmin())
     except Exception:
@@ -222,7 +256,23 @@ class SafetyGovernor:
         """
         if not self.failsafe_enabled:
             return
+
         x, y = get_physical_cursor_pos()
+
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                get_platform_driver().safety.check_failsafe((x, y))
+                return
+            except FailsafeException:
+                raise
+            except Exception:
+                if 0 <= x <= 3 and 0 <= y <= 3:
+                    raise FailsafeException(
+                        f"Failsafe triggered! Cursor at ({x}, {y}) near screen corner. Aborting computer control action."
+                    )
+                return
+
         # Primary screen corner: 0 <= x <= 3 and 0 <= y <= 3
         is_primary_corner = (0 <= x <= 3 and 0 <= y <= 3)
 

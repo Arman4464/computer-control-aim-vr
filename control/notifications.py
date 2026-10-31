@@ -1,7 +1,7 @@
 """
-Native Windows Toast Notification Manager (AIM-VR 3.0 Control Subsystem).
+Native Toast Notification Manager (AIM-VR 3.0 Control Subsystem).
 Provides native Windows Action Center toast notifications using Windows Runtime
-Windows.UI.Notifications.ToastNotificationManager with XML template payloads.
+and native FreeDesktop notifications on Linux via platform driver routing.
 """
 
 import subprocess
@@ -19,17 +19,19 @@ def send_toast_notification(
     sound: bool = True
 ) -> Dict[str, Any]:
     """
-    Dispatches a native Windows toast notification to the Windows Action Center.
-
-    Args:
-        title: Notification header / title.
-        message: Notification body / text.
-        app_id: Registered Windows AppUserModelID. Defaults to Windows PowerShell or Explorer.
-        sound: Whether to play the standard notification sound.
-
-    Returns:
-        {"status": "success" | "error", "message": str}
+    Dispatches a native desktop notification.
+    On Windows: Uses Windows Action Center toast notifications.
+    On Linux: Uses FreeDesktop notify-send / D-Bus via Platform Driver.
     """
+    if sys.platform != "win32":
+        try:
+            from control.platform import get_platform_driver
+            return get_platform_driver().notifier.send_notification(
+                title=title, message=message, app_id=app_id, sound=sound
+            )
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
     if not title and not message:
         return {"status": "error", "message": "Title or message must be provided."}
 
@@ -58,11 +60,11 @@ def send_toast_notification(
         $xmlStr = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{xml_b64}'))
         $appId = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{app_id_b64}'))
 
-        $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-        $xml.LoadXml($xmlStr)
-        $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId)
-        $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
-        $notifier.Show($toast)
+        $xmlDoc = New-Object Windows.Data.Xml.Dom.XmlDocument
+        $xmlDoc.LoadXml($xmlStr)
+
+        $toast = [Windows.UI.Notifications.ToastNotification]::new($xmlDoc)
+        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show($toast)
         Write-Output "SUCCESS"
     }} catch {{
         Write-Error $_.Exception.Message
@@ -70,21 +72,23 @@ def send_toast_notification(
     """
 
     try:
-        # PowerShell 5.1 (powershell.exe) has full WinRT projection support on Windows 10 & 11
-        proc = subprocess.run(
-            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_code],
+        res = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-WindowStyle", "Hidden",
+                "-Command", ps_code
+            ],
             capture_output=True,
             text=True,
             timeout=5.0
         )
-        if proc.returncode == 0 and "SUCCESS" in proc.stdout:
-            return {
-                "status": "success",
-                "message": f"Toast notification sent: '{title}'",
-                "app_id": target_app_id
-            }
+        if res.returncode == 0 and "SUCCESS" in res.stdout:
+            return {"status": "success", "message": f"Toast notification '{title}' dispatched successfully."}
         else:
-            err = proc.stderr.strip() or proc.stdout.strip()
-            return {"status": "error", "message": f"PowerShell Toast failed: {err}"}
+            return {"status": "error", "message": f"Failed to dispatch toast: {res.stderr.strip() or res.stdout.strip()}"}
+    except subprocess.TimeoutExpired:
+        return {"status": "error", "message": "PowerShell toast notification timed out."}
     except Exception as e:
-        return {"status": "error", "message": f"Failed to dispatch toast: {e}"}
+        return {"status": "error", "message": f"Unexpected notification error: {str(e)}"}

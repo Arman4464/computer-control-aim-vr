@@ -1,10 +1,9 @@
 """
 High-Performance Win32 Mouse Engine with Multi-Monitor Virtual Screen
-Coordinate Normalization and Per-Monitor DPI Awareness.
+Coordinate Normalization and Per-Monitor DPI Awareness, with cross-platform driver abstraction.
 """
 
 import ctypes
-from ctypes import wintypes
 import time
 import sys
 import math
@@ -15,8 +14,7 @@ from control.safety import (
     POINT
 )
 
-user32 = ctypes.windll.user32
-shcore = getattr(ctypes.windll, "shcore", None)
+IS_WINDOWS = (sys.platform == "win32")
 
 # 64-bit / 32-bit safe ULONG_PTR
 ULONG_PTR = ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
@@ -83,28 +81,35 @@ SM_YVIRTUALSCREEN = 77
 SM_CXVIRTUALSCREEN = 78
 SM_CYVIRTUALSCREEN = 79
 
-user32.SendInput.argtypes = [ctypes.c_uint, ctypes.POINTER(INPUT), ctypes.c_int]
-user32.SendInput.restype = ctypes.c_uint
-user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
-user32.SetCursorPos.restype = wintypes.BOOL
-user32.GetSystemMetrics.argtypes = [ctypes.c_int]
-user32.GetSystemMetrics.restype = ctypes.c_int
-user32.mouse_event.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, ULONG_PTR]
-user32.mouse_event.restype = None
+if IS_WINDOWS:
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    shcore = getattr(ctypes.windll, "shcore", None)
 
-# Strict 64-bit user32 prototypes for WindowFromPoint and GetAncestor
-user32.WindowFromPoint.argtypes = [POINT]
-user32.WindowFromPoint.restype = wintypes.HWND
-user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
-user32.GetAncestor.restype = wintypes.HWND
+    user32.SendInput.argtypes = [ctypes.c_uint, ctypes.POINTER(INPUT), ctypes.c_int]
+    user32.SendInput.restype = ctypes.c_uint
+    user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
+    user32.SetCursorPos.restype = wintypes.BOOL
+    user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+    user32.GetSystemMetrics.restype = ctypes.c_int
+    user32.mouse_event.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, ULONG_PTR]
+    user32.mouse_event.restype = None
 
-if hasattr(user32, "SetProcessDpiAwarenessContext"):
-    user32.SetProcessDpiAwarenessContext.argtypes = [ctypes.c_void_p]
-    user32.SetProcessDpiAwarenessContext.restype = wintypes.BOOL
+    user32.WindowFromPoint.argtypes = [POINT]
+    user32.WindowFromPoint.restype = wintypes.HWND
+    user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+    user32.GetAncestor.restype = wintypes.HWND
 
-if shcore and hasattr(shcore, "SetProcessDpiAwareness"):
-    shcore.SetProcessDpiAwareness.argtypes = [ctypes.c_int]
-    shcore.SetProcessDpiAwareness.restype = getattr(wintypes, "HRESULT", ctypes.HRESULT)
+    if hasattr(user32, "SetProcessDpiAwarenessContext"):
+        user32.SetProcessDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+        user32.SetProcessDpiAwarenessContext.restype = wintypes.BOOL
+
+    if shcore and hasattr(shcore, "SetProcessDpiAwareness"):
+        shcore.SetProcessDpiAwareness.argtypes = [ctypes.c_int]
+        shcore.SetProcessDpiAwareness.restype = getattr(wintypes, "HRESULT", ctypes.HRESULT)
+else:
+    user32 = None
+    shcore = None
 
 
 def init_dpi_awareness() -> str:
@@ -112,6 +117,9 @@ def init_dpi_awareness() -> str:
     Initializes Per-Monitor DPI awareness to ensure SendInput and screen coordinates
     map 1:1 to physical display pixels without virtual scaling distortion.
     """
+    if not IS_WINDOWS:
+        return "Native Wayland 1:1"
+
     try:
         # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
         if hasattr(user32, "SetProcessDpiAwarenessContext"):
@@ -148,6 +156,13 @@ sys.stderr.write(f"[MouseEngine] DPI Awareness initialized: {_dpi_mode}\n")
 
 def get_virtual_screen_bounds() -> tuple[int, int, int, int]:
     """Returns (vx, vy, vw, vh) of the entire virtual desktop span across all monitors."""
+    if not IS_WINDOWS:
+        try:
+            from control.platform import get_platform_driver
+            return get_platform_driver().window_manager.get_virtual_screen_bounds()
+        except Exception:
+            return 0, 0, 1920, 1080
+
     ensure_interactive_desktop()
     vx = int(user32.GetSystemMetrics(SM_XVIRTUALSCREEN))
     vy = int(user32.GetSystemMetrics(SM_YVIRTUALSCREEN))
@@ -193,6 +208,9 @@ def convert_coords(x: float, y: float, coords_mode: str = "pixel") -> tuple[int,
 
 def _send_mouse_event(flags: int, dx: int = 0, dy: int = 0, data: int = 0):
     """Sends a raw MOUSEINPUT event via SendInput."""
+    if not IS_WINDOWS:
+        return
+
     inp = INPUT()
     inp.type = INPUT_MOUSE
     inp.u.mi.dx = dx
@@ -220,6 +238,14 @@ class MouseEngine:
 
     def _raw_mouse_down(self, button: str = "left") -> None:
         btn = button.lower()
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                get_platform_driver().input.mouse_down(button=btn)
+            except Exception:
+                pass
+            return
+
         if btn == "left":
             flags = MOUSEEVENTF_LEFTDOWN
         elif btn == "right":
@@ -232,6 +258,14 @@ class MouseEngine:
 
     def _raw_mouse_up(self, button: str = "left") -> None:
         btn = button.lower()
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                get_platform_driver().input.mouse_up(button=btn)
+            except Exception:
+                pass
+            return
+
         if btn == "left":
             flags = MOUSEEVENTF_LEFTUP
         elif btn == "right":
@@ -246,8 +280,17 @@ class MouseEngine:
         """Moves cursor to specified target coordinates."""
         self.governor.pre_action()
         target_x, target_y = convert_coords(x, y, coords_mode)
-        norm_x, norm_y = to_virtual_normalized(target_x, target_y)
 
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                get_platform_driver().input.move_cursor(target_x, target_y)
+            except Exception:
+                pass
+            self.governor.post_action((target_x, target_y))
+            return target_x, target_y
+
+        norm_x, norm_y = to_virtual_normalized(target_x, target_y)
         flags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK
         _send_mouse_event(flags, norm_x, norm_y)
 
@@ -256,6 +299,8 @@ class MouseEngine:
 
         self.governor.post_action((target_x, target_y))
         return target_x, target_y
+
+    move_cursor = move
 
     def mouse_down(self, button: str = "left") -> None:
         """Presses and holds the specified mouse button ('left', 'right', 'middle')."""
@@ -311,14 +356,30 @@ class MouseEngine:
 
         if x is not None and y is not None:
             target_x, target_y = convert_coords(x, y, coords_mode)
-            norm_x, norm_y = to_virtual_normalized(target_x, target_y)
-            _send_mouse_event(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, norm_x, norm_y)
-            user32.SetCursorPos(target_x, target_y)
             cur_x, cur_y = target_x, target_y
+            if IS_WINDOWS:
+                norm_x, norm_y = to_virtual_normalized(target_x, target_y)
+                _send_mouse_event(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, norm_x, norm_y)
+                user32.SetCursorPos(target_x, target_y)
+            else:
+                try:
+                    from control.platform import get_platform_driver
+                    get_platform_driver().input.move_cursor(target_x, target_y)
+                except Exception:
+                    pass
         else:
             cur_x, cur_y = self.get_position()
 
-        # Auto-activate window under cursor if not current foreground to prevent WM_ACTIVATE swallowing
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                get_platform_driver().input.click(x=cur_x, y=cur_y, button=button, clicks=clicks)
+            except Exception:
+                pass
+            self.governor.post_action((cur_x, cur_y))
+            return cur_x, cur_y
+
+        # Auto-activate window under cursor if not current foreground on Windows
         try:
             ensure_interactive_desktop()
             pt = POINT(cur_x, cur_y)
@@ -360,6 +421,15 @@ class MouseEngine:
         s_x, s_y = convert_coords(start_x, start_y, coords_mode)
         e_x, e_y = convert_coords(end_x, end_y, coords_mode)
 
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                get_platform_driver().input.drag(s_x, s_y, e_x, e_y, button=button, duration=duration)
+            except Exception:
+                pass
+            self.governor.post_action((e_x, e_y))
+            return
+
         # Move to start
         norm_sx, norm_sy = to_virtual_normalized(s_x, s_y)
         _send_mouse_event(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, norm_sx, norm_sy)
@@ -399,8 +469,17 @@ class MouseEngine:
             self.move(x, y, coords_mode)
 
         self.governor.pre_action()
+
+        if not IS_WINDOWS:
+            try:
+                from control.platform import get_platform_driver
+                get_platform_driver().input.scroll(clicks)
+            except Exception:
+                pass
+            self.governor.post_action()
+            return
+
         wheel_data = int(clicks * WHEEL_DELTA)
-        # Clean signed-to-unsigned DWORD packing for negative scroll values
         packed_data = ctypes.c_ulong(wheel_data).value
         _send_mouse_event(MOUSEEVENTF_WHEEL, data=packed_data)
         self.governor.post_action()
@@ -414,6 +493,11 @@ class MouseEngine:
             self.move(x, y, coords_mode)
 
         self.governor.pre_action()
+
+        if not IS_WINDOWS:
+            self.governor.post_action()
+            return
+
         wheel_data = int(clicks * WHEEL_DELTA)
         packed_data = ctypes.c_ulong(wheel_data).value
         _send_mouse_event(MOUSEEVENTF_HWHEEL, data=packed_data)

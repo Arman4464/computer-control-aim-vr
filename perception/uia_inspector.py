@@ -8,17 +8,20 @@ import sys
 import ctypes
 from ctypes import wintypes
 from typing import Optional, List, Dict, Any, Tuple
-from control.safety import ensure_interactive_desktop, run_in_interactive_desktop, user32
+from control.safety import ensure_interactive_desktop, run_in_interactive_desktop, user32, IS_WINDOWS
 
-user32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
-user32.FindWindowW.restype = wintypes.HWND
+if IS_WINDOWS and user32 is not None:
+    user32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+    user32.FindWindowW.restype = wintypes.HWND
+
 from perception.screen_capture import find_window, list_visible_windows, get_foreground_window_info
 
-# Import uiautomation after desktop setup is available
-import uiautomation as auto
-
-# Prevent long UI hangs on unresponsive controls
-auto.uiautomation.TIME_OUT_SECOND = 1.0
+# Import uiautomation safely
+try:
+    import uiautomation as auto
+    auto.uiautomation.TIME_OUT_SECOND = 1.0
+except Exception:
+    auto = None
 
 INTERACTIVE_TYPES = {
     "ButtonControl", "MenuItemControl", "MenuControl", "MenuBarControl",
@@ -91,6 +94,15 @@ def _inspect_window_core(
       - has_rich_uia: True if enough interactive elements found, False if custom canvas
     """
     ensure_interactive_desktop()
+    if auto is None:
+        return {
+            "status": "empty",
+            "elements": [],
+            "count": 0,
+            "target": target,
+            "tree_compact": "",
+            "is_fallback": True,
+        }
 
     root_ctrl = None
     win_title = ""
@@ -249,126 +261,131 @@ def find_element_by_query(
     win_info = find_window(target) if target else None
 
     def _search():
-        search_root = None
-        if target:
-            if win_info and win_info.get("hwnd"):
-                try:
-                    search_root = auto.ControlFromHandle(win_info["hwnd"])
-                except Exception:
-                    pass
-            if not search_root:
-                # Try finding window by SubName or ClassName
-                w = auto.WindowControl(searchDepth=2, SubName=target)
-                if not w.Exists(0.2):
-                    w = auto.WindowControl(searchDepth=2, ClassName=target)
-                if w and w.Exists(0.2):
-                    search_root = w
-        else:
-            fg = get_foreground_window_info()
-            if fg and fg["hwnd"]:
-                try:
-                    w = auto.ControlFromHandle(fg["hwnd"])
+        if auto is not None:
+            search_root = None
+            if target:
+                if win_info and win_info.get("hwnd"):
+                    try:
+                        search_root = auto.ControlFromHandle(win_info["hwnd"])
+                    except Exception:
+                        pass
+                if not search_root:
+                    # Try finding window by SubName or ClassName
+                    w = auto.WindowControl(searchDepth=2, SubName=target)
+                    if not w.Exists(0.2):
+                        w = auto.WindowControl(searchDepth=2, ClassName=target)
                     if w and w.Exists(0.2):
                         search_root = w
-                except Exception:
-                    pass
-
-        if not search_root:
-            search_root = auto.GetRootControl()
-
-        if name:
-            control_types = []
-            if role:
-                r_lower = role.lower()
-                if "button" in r_lower: control_types.append(auto.ButtonControl)
-                elif "tree" in r_lower: control_types.append(auto.TreeItemControl)
-                elif "menu" in r_lower: control_types.append(auto.MenuItemControl)
-                elif "tab" in r_lower: control_types.append(auto.TabItemControl)
-                elif "list" in r_lower: control_types.append(auto.ListItemControl)
-                elif "link" in r_lower: control_types.append(auto.HyperlinkControl)
-                elif "edit" in r_lower: control_types.append(auto.EditControl)
-            
-            if not control_types:
-                control_types = [
-                    auto.TreeItemControl, auto.ListItemControl, auto.MenuItemControl,
-                    auto.TabItemControl, auto.ButtonControl, auto.HyperlinkControl,
-                    auto.SplitButtonControl, auto.Control
-                ]
-
-            candidates = []
-            for ctype in control_types:
-                try:
-                    ctrl = ctype(searchFromControl=search_root, searchDepth=8, SubName=name)
-                    if ctrl.Exists(0.15):
-                        rect = ctrl.BoundingRectangle
-                        w_px = rect.width()
-                        h_px = rect.height()
-                        if w_px > 0 and h_px > 0 and rect.left > -10000:
-                            c_name = ctrl.Name or ""
-                            cx = int(rect.left + w_px / 2)
-                            cy = int(rect.top + h_px / 2)
-                            info = {
-                                "name": c_name,
-                                "role": _clean_role(ctrl.ControlTypeName),
-                                "id": ctrl.AutomationId or "",
-                                "bbox": [int(rect.left), int(rect.top), int(w_px), int(h_px)],
-                                "center": [cx, cy],
-                                "enabled": bool(ctrl.IsEnabled),
-                            }
-                            # Exact or prefix match is preferred immediately
-                            if c_name.strip().lower() == name.lower() or c_name.strip().lower().startswith(name.lower()):
-                                return info
-                            candidates.append(info)
-                except Exception:
-                    continue
-
-            if candidates:
-                return candidates[0]
-
-            # If not found in primary search_root and no specific target was requested, check Taskbar ('Shell_TrayWnd')
-            if not target:
-                tb_hwnd = user32.FindWindowW("Shell_TrayWnd", None)
-                if tb_hwnd:
+            else:
+                fg = get_foreground_window_info()
+                if fg and fg["hwnd"]:
                     try:
-                        tb_ctrl = auto.ControlFromHandle(tb_hwnd)
-                        for ctype in [auto.ButtonControl, auto.ListItemControl, auto.Control]:
-                            ctrl = ctype(searchFromControl=tb_ctrl, searchDepth=6, SubName=name)
-                            if ctrl.Exists(0.15):
-                                rect = ctrl.BoundingRectangle
-                                w_px = rect.width()
-                                h_px = rect.height()
-                                if w_px > 0 and h_px > 0 and rect.left > -10000:
-                                    cx = int(rect.left + w_px / 2)
-                                    cy = int(rect.top + h_px / 2)
-                                    return {
-                                        "name": ctrl.Name,
-                                        "role": _clean_role(ctrl.ControlTypeName),
-                                        "id": ctrl.AutomationId or "",
-                                        "bbox": [int(rect.left), int(rect.top), int(w_px), int(h_px)],
-                                        "center": [cx, cy],
-                                        "enabled": bool(ctrl.IsEnabled),
-                                    }
+                        w = auto.ControlFromHandle(fg["hwnd"])
+                        if w and w.Exists(0.2):
+                            search_root = w
                     except Exception:
                         pass
 
-        # 2. Fallback to tree walk if direct search didn't find it
-        tree_data = _inspect_window_core(target=target, max_depth=6, max_elements=150, win_info=win_info)
-        name_lower = name.lower() if name else None
-        role_lower = role.lower() if role else None
-        id_lower = automation_id.lower() if automation_id else None
+            if not search_root:
+                search_root = auto.GetRootControl()
 
-        for elem in tree_data["elements"]:
-            match_name = (not name_lower) or (name_lower in elem["name"].lower())
-            match_role = (not role_lower) or (role_lower in elem["role"].lower())
-            match_id = (not id_lower) or (id_lower in elem["id"].lower())
+            if name:
+                control_types = []
+                if role:
+                    r_lower = role.lower()
+                    if "button" in r_lower: control_types.append(auto.ButtonControl)
+                    elif "tree" in r_lower: control_types.append(auto.TreeItemControl)
+                    elif "menu" in r_lower: control_types.append(auto.MenuItemControl)
+                    elif "tab" in r_lower: control_types.append(auto.TabItemControl)
+                    elif "list" in r_lower: control_types.append(auto.ListItemControl)
+                    elif "link" in r_lower: control_types.append(auto.HyperlinkControl)
+                    elif "edit" in r_lower: control_types.append(auto.EditControl)
+                
+                if not control_types:
+                    control_types = [
+                        auto.TreeItemControl, auto.ListItemControl, auto.MenuItemControl,
+                        auto.TabItemControl, auto.ButtonControl, auto.HyperlinkControl,
+                        auto.SplitButtonControl, auto.Control
+                    ]
 
-            if match_name and match_role and match_id:
-                return elem
+                candidates = []
+                for ctype in control_types:
+                    try:
+                        ctrl = ctype(searchFromControl=search_root, searchDepth=8, SubName=name)
+                        if ctrl.Exists(0.15):
+                            rect = ctrl.BoundingRectangle
+                            w_px = rect.width()
+                            h_px = rect.height()
+                            if w_px > 0 and h_px > 0 and rect.left > -10000:
+                                c_name = ctrl.Name or ""
+                                cx = int(rect.left + w_px / 2)
+                                cy = int(rect.top + h_px / 2)
+                                info = {
+                                    "name": c_name,
+                                    "role": _clean_role(ctrl.ControlTypeName),
+                                    "id": ctrl.AutomationId or "",
+                                    "bbox": [int(rect.left), int(rect.top), int(w_px), int(h_px)],
+                                    "center": [cx, cy],
+                                    "enabled": bool(ctrl.IsEnabled),
+                                }
+                                # Exact or prefix match is preferred immediately
+                                if c_name.strip().lower() == name.lower() or c_name.strip().lower().startswith(name.lower()):
+                                    return info
+                                candidates.append(info)
+                    except Exception:
+                        continue
 
-        # 3. Tier 2 Fallback: Native WinRT OCR text spotting
+                if candidates:
+                    return candidates[0]
+
+                # If not found in primary search_root and no specific target was requested, check Taskbar ('Shell_TrayWnd')
+                if not target and user32:
+                    tb_hwnd = user32.FindWindowW("Shell_TrayWnd", None)
+                    if tb_hwnd:
+                        try:
+                            tb_ctrl = auto.ControlFromHandle(tb_hwnd)
+                            for ctype in [auto.ButtonControl, auto.ListItemControl, auto.Control]:
+                                ctrl = ctype(searchFromControl=tb_ctrl, searchDepth=6, SubName=name)
+                                if ctrl.Exists(0.15):
+                                    rect = ctrl.BoundingRectangle
+                                    w_px = rect.width()
+                                    h_px = rect.height()
+                                    if w_px > 0 and h_px > 0 and rect.left > -10000:
+                                        cx = int(rect.left + w_px / 2)
+                                        cy = int(rect.top + h_px / 2)
+                                        return {
+                                            "name": ctrl.Name,
+                                            "role": _clean_role(ctrl.ControlTypeName),
+                                            "id": ctrl.AutomationId or "",
+                                            "bbox": [int(rect.left), int(rect.top), int(w_px), int(h_px)],
+                                            "center": [cx, cy],
+                                            "enabled": bool(ctrl.IsEnabled),
+                                        }
+                        except Exception:
+                            pass
+
+            # 2. Fallback to tree walk if direct search didn't find it
+            tree_data = _inspect_window_core(target=target, max_depth=6, max_elements=150, win_info=win_info)
+            name_lower = name.lower() if name else None
+            role_lower = role.lower() if role else None
+            id_lower = automation_id.lower() if automation_id else None
+
+            for elem in tree_data["elements"]:
+                match_name = (not name_lower) or (name_lower in elem["name"].lower())
+                match_role = (not role_lower) or (role_lower in elem["role"].lower())
+                match_id = (not id_lower) or (id_lower in elem["id"].lower())
+
+                if match_name and match_role and match_id:
+                    return elem
+
+        # 3. Tier 2 Fallback: Native OCR text spotting
         if name:
             try:
-                from perception.winrt_ocr import default_ocr
+                if IS_WINDOWS:
+                    from perception.winrt_ocr import default_ocr
+                else:
+                    from control.platform.hyprland.linux_ocr import default_linux_ocr as default_ocr
+
                 from perception.screen_capture import capture_window, capture_screen
                 from control.mouse_engine import get_virtual_screen_bounds
 
@@ -382,6 +399,8 @@ def find_element_by_query(
 
                 ocr_match = default_ocr.find_text(win_img, name)
                 if ocr_match:
+                    if isinstance(ocr_match, list) and len(ocr_match) > 0:
+                        ocr_match = ocr_match[0]
                     bx, by, bw, bh = ocr_match["bbox"]
                     abs_cx = offset_x + ocr_match["center"][0]
                     abs_cy = offset_y + ocr_match["center"][1]
@@ -393,7 +412,7 @@ def find_element_by_query(
                         "bbox": abs_bbox,
                         "center": [abs_cx, abs_cy],
                         "enabled": True,
-                        "source": "winrt_ocr",
+                        "source": "ocr",
                     }
             except Exception as e:
                 sys.stderr.write(f"[UIA] OCR fallback error: {e}\n")

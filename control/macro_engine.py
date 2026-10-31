@@ -38,26 +38,35 @@ from perception.screen_capture import (
     get_window_client_bounds,
 )
 from perception.uia_inspector import find_element_by_query, _clean_text
-from perception.winrt_ocr import default_ocr
+if sys.platform == "win32":
+    from perception.winrt_ocr import default_ocr
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    SMTO_NORMAL = 0x0000
+    SMTO_BLOCK = 0x0001
+    SMTO_ABORTIFHUNG = 0x0002
+    SMTO_NOTIMEOUTIFNOTHUNG = 0x0008
+    WM_NULL = 0x0000
 
-user32 = ctypes.windll.user32
-SMTO_NORMAL = 0x0000
-SMTO_BLOCK = 0x0001
-SMTO_ABORTIFHUNG = 0x0002
-SMTO_NOTIMEOUTIFNOTHUNG = 0x0008
-WM_NULL = 0x0000
-
-# 64-bit safe SendMessageTimeoutW prototype
-user32.SendMessageTimeoutW.argtypes = [
-    wintypes.HWND,
-    wintypes.UINT,
-    wintypes.WPARAM,
-    wintypes.LPARAM,
-    wintypes.UINT,
-    wintypes.UINT,
-    ctypes.POINTER(wintypes.DWORD),
-]
-user32.SendMessageTimeoutW.restype = wintypes.LPARAM
+    # 64-bit safe SendMessageTimeoutW prototype
+    user32.SendMessageTimeoutW.argtypes = [
+        wintypes.HWND,
+        wintypes.UINT,
+        wintypes.WPARAM,
+        wintypes.LPARAM,
+        wintypes.UINT,
+        wintypes.UINT,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    user32.SendMessageTimeoutW.restype = wintypes.LPARAM
+else:
+    from control.platform.hyprland.linux_ocr import default_linux_ocr as default_ocr
+    user32 = None
+    SMTO_NORMAL = 0x0000
+    SMTO_BLOCK = 0x0001
+    SMTO_ABORTIFHUNG = 0x0002
+    SMTO_NOTIMEOUTIFNOTHUNG = 0x0008
+    WM_NULL = 0x0000
 
 
 # =====================================================================
@@ -66,10 +75,12 @@ user32.SendMessageTimeoutW.restype = wintypes.LPARAM
 
 def wait_for_message_pump(hwnd: int, timeout_ms: int = 150) -> bool:
     """
-    Tier 5 Barrier: Sends WM_NULL to target window with timeout.
-    Verifies that the window message loop is idle, unblocked, and ready for input.
+    Tier 5 Barrier: Sends WM_NULL to target window with timeout on Windows.
     Returns True if responsive, False if hung or timed out.
+    On Linux, returns True immediately.
     """
+    if sys.platform != "win32" or user32 is None:
+        return True
     if not hwnd or not user32.IsWindow(hwnd):
         return True
     try:
