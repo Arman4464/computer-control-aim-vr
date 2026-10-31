@@ -689,6 +689,7 @@ class TestClipboardSubsystem(unittest.TestCase):
             text = "Hello World! 🚀 日本語 12345"
             ok = default_clipboard.set_text(text)
             self.assertTrue(ok)
+            time.sleep(0.02)
             out = default_clipboard.get_text()
             self.assertEqual(out, text)
         finally:

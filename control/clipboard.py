@@ -42,7 +42,7 @@ kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
 kernel32.GlobalFree.restype = wintypes.HGLOBAL
 
 
-def _open_clipboard_with_retry(max_retries: int = 5, delay: float = 0.02) -> bool:
+def _open_clipboard_with_retry(max_retries: int = 15, delay: float = 0.02) -> bool:
     """Attempts to open clipboard with short retries to handle brief locks by other apps."""
     for _ in range(max_retries):
         if user32.OpenClipboard(None):
@@ -60,7 +60,12 @@ class ClipboardManager:
     def get_text(self) -> str:
         """Returns the current plain/Unicode text on the system clipboard."""
         if not user32.IsClipboardFormatAvailable(CF_UNICODETEXT):
-            return ""
+            for _ in range(5):
+                time.sleep(0.01)
+                if user32.IsClipboardFormatAvailable(CF_UNICODETEXT):
+                    break
+            else:
+                return ""
 
         if not _open_clipboard_with_retry():
             return ""
